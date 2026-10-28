@@ -1,45 +1,60 @@
 "use strict";
 var is_fullscreen = false;
+// Fullscreen for the game player. Uses the browser's Fullscreen API where it exists (computers, Android, iPad)
+// and falls back to stretching the player over the page where it doesn't (iPhone, in-app browsers).
+(function () {
+	var css = document.createElement('style');
+	css.textContent =
+		'#game-player.fs-fallback{position:fixed!important;top:0;left:0;width:100vw!important;height:100vh!important;height:100dvh!important;min-height:0!important;z-index:2147483000!important;background:#000;display:block!important}' +
+		'#game-player:fullscreen,#game-player.fs-fallback{width:100vw;height:100vh}' +
+		'#game-player:-webkit-full-screen{width:100vw;height:100vh}' +
+		'#game-player:fullscreen #mobile-back-button,#game-player:-webkit-full-screen #mobile-back-button,#game-player.fs-fallback #mobile-back-button{display:flex!important;z-index:2147483001}' +
+		'body.fs-lock{overflow:hidden!important}';
+	document.head.appendChild(css);
+	function on_change() {
+		var el = fullscreen_element();
+		if (!el && is_fullscreen && !document.body.classList.contains('fs-lock')) is_fullscreen = false;   // left with Esc / back gesture
+	}
+	document.addEventListener('fullscreenchange', on_change);
+	document.addEventListener('webkitfullscreenchange', on_change);
+})();
+function fullscreen_element() {
+	return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || null;
+}
 function open_fullscreen() {
-	let game = document.getElementById("game-area");
-	if(is_fullscreen){
+	if (window.event && window.event.preventDefault) window.event.preventDefault();   // don't jump to the top of the page
+	let player = document.getElementById("game-player");
+	if (!player) return;
+	let back = document.getElementById("mobile-back-button");
+	if (is_fullscreen || fullscreen_element()) {
 		// Exit fullscreen
 		is_fullscreen = false;
-		if(is_mobile_device()){
-			game.style.position = "absolute";
-			document.getElementById("mobile-back-button").style.display = "none";
-			document.getElementById("game-player").style.display = "none";
-		} else {
-			if (game.requestFullscreen) {
-				game.requestFullscreen();
-			} else if (game.mozRequestFullScreen) { /* Firefox */
-				game.mozRequestFullScreen();
-			} else if (game.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
-				game.webkitRequestFullscreen();
-			} else if (game.msRequestFullscreen) { /* IE/Edge */
-				game.msRequestFullscreen();
-			}
+		player.classList.remove('fs-fallback');
+		document.body.classList.remove('fs-lock');
+		if (back) back.style.display = "";
+		if (fullscreen_element()) {
+			let exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+			if (exit) exit.call(document);
 		}
-	} else {
-		// Enter fullscreen
-		is_fullscreen = true;
-		if(is_mobile_device()){
-			document.getElementById("game-player").style.display = "block";
-			game.style.position = "fixed";
-			document.getElementById("mobile-back-button").style.display = "flex";
-		} else {
-			if (game.requestFullscreen) {
-				game.requestFullscreen();
-			} else if (game.mozRequestFullScreen) { /* Firefox */
-				game.mozRequestFullScreen();
-			} else if (game.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
-				game.webkitRequestFullscreen();
-			} else if (game.msRequestFullscreen) { /* IE/Edge */
-				game.msRequestFullscreen();
-			}
-		}
+		return;
 	}
-};
+	// Enter fullscreen
+	is_fullscreen = true;
+	let request = player.requestFullscreen || player.webkitRequestFullscreen || player.mozRequestFullScreen || player.msRequestFullscreen;
+	let fallback = function () {
+		player.classList.add('fs-fallback');
+		document.body.classList.add('fs-lock');
+		window.scrollTo(0, 0);
+	};
+	if (request) {
+		try {
+			let r = request.call(player);
+			if (r && r.catch) r.catch(fallback);   // blocked (e.g. in-app browsers): use the fallback instead
+		} catch (e) { fallback(); }
+	} else {
+		fallback();
+	}
+}
 function is_mobile_device(){
 	if (navigator.userAgent.match(/Android/i)
 	|| navigator.userAgent.match(/webOS/i)
@@ -57,7 +72,7 @@ if($('iframe#game-area').length){
 	load_leaderboard({type: 'top', amount: 10});
 	drag_back_btn(document.getElementById("mobile-back-button"));
 	if(is_mobile_device()){
-		if($('#allow_mobile_version').length){
+		if($('#allow_mobile_version').length && document.getElementById('mobile-play')){
 			document.getElementById('mobile-play').style.display = 'block';
 			document.getElementById('game-player').style.display = 'none';
 		}
