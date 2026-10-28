@@ -7005,40 +7005,30 @@ window.__compose = function(SIZE){ const U = 240, S = SIZE / U;
 const cv = document.createElement('canvas'); cv.width = cv.height = SIZE;
 const g = cv.getContext('2d');
 
-state.frameCount = 0; state.nightAlpha = 0; state.goreLevel = 'none'; state.height = 5000;
+state.frameCount = 0; state.goreLevel = 'none'; state.dayNightTime = 0;
 ensureTextures();
-g.save(); g.scale(S, S);
-// rounded-square clip
-g.beginPath(); g.roundRect(0, 0, U, U, 52); g.clip();
-// sky
-let sk = g.createLinearGradient(0, 0, 0, U);
-sk.addColorStop(0, '#3fa9f5'); sk.addColorStop(0.65, '#8fd6ff'); sk.addColorStop(1, '#d6f2ff');
-g.fillStyle = sk; g.fillRect(0, 0, U, U);
-// sun glow
-let sg = g.createRadialGradient(120, 120, 0, 120, 120, 120);
-sg.addColorStop(0, 'rgba(255,248,200,0.55)'); sg.addColorStop(1, 'rgba(255,248,200,0)');
-g.fillStyle = sg; g.fillRect(0, 0, U, U);
-// clouds
-const cloud = (x, y, s) => { g.save(); g.translate(x, y); g.scale(s, s); g.fillStyle = 'rgba(255,255,255,0.9)';
-  g.beginPath(); g.arc(0, 0, 14, 0, 7); g.arc(16, -6, 18, 0, 7); g.arc(34, 0, 13, 0, 7); g.rect(0, 0, 34, 13); g.fill(); g.restore(); };
-cloud(28, 150, 1.0); cloud(150, 186, 0.8);
-// hills + ground
-g.fillStyle = '#7cc56a'; g.beginPath(); g.moveTo(0, 205); g.quadraticCurveTo(60, 178, 120, 200); g.quadraticCurveTo(180, 182, 240, 198); g.lineTo(240, 240); g.lineTo(0, 240); g.fill();
-g.fillStyle = '#5fc34a'; g.fillRect(0, 214, U, 8); g.fillStyle = '#d9a35b'; g.fillRect(0, 222, U, 18);
-g.strokeStyle = INK; g.lineWidth = 2.5; g.beginPath(); g.moveTo(0, 214); g.lineTo(U, 214); g.stroke();
-g.restore();
-
+const GW = state.width, GH = state.height;
+const layer = () => { const c = document.createElement('canvas'); c.width = GW * 2; c.height = GH * 2; const x = c.getContext('2d'); x.scale(2, 2); return [c, x]; };
+const [skyC, skyX] = layer(), [grC, grX] = layer();
+{ const real = ctx; try { ctx = skyX; drawBackground(); ctx = grX; drawGround(); } finally { ctx = real; } }
+// crop a square from the real scene so the ground sits along the bottom
+const CROP = GH - 60, cy0 = GH - 20 - CROP, cx0 = (GW - CROP) / 2;
+const blitScene = (img) => { g.save(); g.scale(S, S); g.beginPath(); g.roundRect(0, 0, U, U, 52); g.clip();
+  g.drawImage(img, cx0 * 2, cy0 * 2, CROP * 2, CROP * 2, 0, 0, U, U); g.restore(); };
+blitScene(skyC);
+state.height = 5000;                       // keep floor shadows off the character art
 const withCtx = (fn) => { const real = ctx; ctx = g; try { g.save(); fn(); g.restore(); } finally { ctx = real; } };
 
 // --- pipe + piranha plant (bottom right) ---
 withCtx(() => {
   g.scale(S, S); g.beginPath(); g.roundRect(0, 0, U, U, 52); g.clip();
-  g.translate(170, 18); g.scale(1.12, 1.12);
+  g.translate(166, 0); g.scale(1.25, 1.25);
   const pipe = { x: 0, top: -400, gap: 528, kind: 'green', isMoving: false, stains: [],
-    plant: { side: 'bottom', isFire: false, state: 'OUT', extension: 52, maxExt: 52, bitePhase: 0.6, biteAngle: 0.6, aimAngle: 0, bloody: false } };
+    plant: { side: 'bottom', isFire: false, state: 'OUT', extension: 34, maxExt: 34, bitePhase: 0.6, biteAngle: 0.45, aimAngle: 0, bloody: false } };
   const keep = pipes; pipes = [pipe];
   try { drawPiranhaPlants(); drawPipes(); } finally { pipes = keep; }
 });
+blitScene(grC);
 // --- Mr. Mitt (top right) ---
 withCtx(() => {
   g.scale(S, S); g.beginPath(); g.roundRect(0, 0, U, U, 52); g.clip();
