@@ -18,6 +18,36 @@ var is_fullscreen = false;
 	document.addEventListener('fullscreenchange', on_change);
 	document.addEventListener('webkitfullscreenchange', on_change);
 })();
+// Games pinned to the top of every page's "Hot Game" list. Paths are relative to the site root.
+var PINNED_HOT_GAMES = [
+	{ name: 'Flappy Bird Arcade', page: 'play/flappy-bird-arcade.html', img: 'images/flappy-bird-arcade.png' },
+	{ name: 'Bayside Heat', page: 'play/bayside-heat.html', img: 'images/bayside-heat.png' }
+];
+var SITE_ROOT = (function () {
+	var s = document.currentScript && document.currentScript.src;
+	return s ? new URL('../', s).href : new URL('/', location.href).href;   // script.js lives in /js/
+})();
+function add_pinned_hot_games() {
+	var heading = Array.prototype.find.call(document.querySelectorAll('h3'), function (h) { return h.textContent.trim() === 'Hot Game'; });
+	if (!heading) return;
+	var box = heading.closest('[align="center"]') || heading.parentElement.parentElement;
+	var list = box && box.querySelector('.vex_x');
+	if (!list) return;
+	PINNED_HOT_GAMES.slice().reverse().forEach(function (g) {
+		var href = new URL(g.page, SITE_ROOT).href;
+		var have = Array.prototype.some.call(list.querySelectorAll('a'), function (a) { return a.href === href; });
+		if (have) return;
+		var card = document.createElement('div');
+		card.className = 'col-lg-12 col-md-4 col-6 list-grid';
+		card.innerHTML = '<a title="' + g.name + '" href="' + href + '"><div class="list-game">' +
+			'<div class="list-thumbnail"><img src="' + new URL(g.img, SITE_ROOT).href + '" class="small-thumb img-rounded" alt="' + g.name + '"></div>' +
+			'<div style="color: white;"><strong>' + g.name + '</strong></div></div></a>';
+		list.insertBefore(document.createElement('br'), list.firstChild);
+		list.insertBefore(card, list.firstChild);
+	});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add_pinned_hot_games);
+else add_pinned_hot_games();
 function fullscreen_element() {
 	return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || null;
 }

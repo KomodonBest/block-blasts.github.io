@@ -201,6 +201,7 @@
         .boss-entry-body { display: flex; gap: 10px; align-items: stretch; }
         .boss-preview { width: 118px; height: 128px; flex: none; border: 3px solid var(--ink); border-radius: 12px; background: linear-gradient(#5fb4ee, #c9e8fb); display: block; }
         .boss-entry.glove .boss-preview { background: linear-gradient(#3b3f8f, #c96aa8); }
+        .boss-entry.dino .boss-preview { background: linear-gradient(#f59e0b, #fde68a); }
         .boss-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
         .boss-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; font-weight: 700; color: var(--ink); }
         .boss-phrase { flex: 1; display: flex; align-items: center; margin: 0; font-size: 13px; font-style: italic; color: #3a4357; line-height: 1.25; }
@@ -425,6 +426,17 @@
                                 <div class="boss-stats"><span>HP: 100</span><span>Difficulty: <span class="diff insane">Insane</span></span></div>
                                 <p class="boss-phrase">"Hold still. You're smudging my work."</p>
                                 <button class="btn red small boss-play" data-kind="glove">PLAY</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="boss-entry dino">
+                        <div class="boss-entry-name">Mr. Chompsalot</div>
+                        <div class="boss-entry-body">
+                            <canvas class="boss-preview" data-kind="dino"></canvas>
+                            <div class="boss-info">
+                                <div class="boss-stats"><span>HP: 100</span><span>Difficulty: <span class="diff demon">Demon</span></span></div>
+                                <p class="boss-phrase">"I can't reach the snacks either. That's why I'm angry."</p>
+                                <button class="btn red small boss-play" data-kind="dino">PLAY</button>
                             </div>
                         </div>
                     </div>
@@ -1479,7 +1491,7 @@
             }
             _jet[key] = n ? prev : null;
             // slow ooze between beats
-            if (Math.random() < 0.3 * b) spawnDrop(x, y, vx * 0.2 + rand(-0.3, 0.3), 0.2, rand(1.4, 2.8), 0, 2);
+            if (Math.random() < 0.45 * b) spawnDrop(x, y, vx * 0.2 + rand(-0.3, 0.3), 0.2, rand(1.2, 2.8), 0, 2);
         }
 
         // Fantasy Cartoon "POOF!" effect for Remove Gore mode
@@ -1572,7 +1584,7 @@
 
             // pressure jets: chains of linked drops fired together, each a little faster than
             // the last, so they stretch into ribbons and then pinch off into droplets
-            const jets = Math.round(count / 7) + 3;
+            const jets = Math.round(count / 5) + 4;
             for (let j = 0; j < jets; j++) {
                 const a = rand(0, BTAU), sp0 = rand(3, 11);
                 const n = 4 + Math.floor(rand(0, 4));
@@ -1584,7 +1596,7 @@
                 }
             }
             // fine spray: many tiny, few big
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < count * 1.4; i++) {
                 const a = rand(0, BTAU);
                 const s = 1.5 + Math.pow(Math.random(), 1.6) * 11;
                 spawnDrop(x, y, Math.cos(a) * s + hvx * 0.5, Math.sin(a) * s - 2.5 + hvy * 0.5,
@@ -1595,7 +1607,7 @@
                 spawnMist(x, y, Math.cos(a) * s + hvx * 0.2, Math.sin(a) * s - 0.5);
             }
             // a few fat, slow gobs of blood that fall heavily and burst into big splats
-            const gobs = state.goreLevel === 'light' ? 1 : (heavy ? 6 : 3);
+            const gobs = state.goreLevel === 'light' ? 2 : (heavy ? 9 : 5);
             for (let i = 0; i < gobs; i++) {
                 const a = rand(-Math.PI, 0), s = rand(1.5, 5);
                 spawnDrop(x + rand(-3, 3), y, Math.cos(a) * s + hvx * 0.4, Math.sin(a) * s + hvy * 0.4, rand(3.2, 4.2), 0, 1);
@@ -1760,33 +1772,63 @@
         }
 
         // ---------- ground splatter ----------
+        // No blood pools: anything that used to start a pool stamps a splatter burst instead,
+        // and anything that used to feed a pool leaves the odd fresh drip mark.
         function addPuddle(x, y, maxR) {
-            if (state.goreLevel === 'none' || puddles.length >= 24) return;
-            if (state.goreLevel === 'light') maxR *= 0.65;
-            const n = 16, noise = [];
-            for (let i = 0; i < n; i++) noise.push(1 + rand(-0.18, 0.22));
-            for (let i = 0; i < n; i++) noise[i] = (noise[(i + n - 1) % n] + noise[i] * 2 + noise[(i + 1) % n]) / 4;
-            // a few fingers where it has run along the ground
-            [0, n / 2].forEach(a => { noise[(a + (Math.random() < 0.5 ? 0 : 1)) % n] *= rand(1.3, 1.8); });
-            puddles.push({ x, y, r: 2, maxR, cap: maxR * 1.7 + 8, age: 0, noise });
+            if (state.goreLevel === 'none') return;
+            if (state.goreLevel === 'light') maxR *= 0.6;
+            stampSplatter(x, y, Math.min(9, maxR * 0.28));
         }
         function growPuddleAt(x, amount) {
-            if (state.goreLevel === 'none') return false;
-            if (state.goreLevel === 'light') amount *= 0.5;
-            for (const pu of puddles) {
-                if (Math.abs(pu.x - x) < pu.r + 12) {
-                    pu.maxR = Math.min(pu.cap, pu.maxR + amount);
-                    pu.age = Math.min(pu.age, 240);
-                    return true;
+            if (state.goreLevel === 'none') return true;
+            if (Math.random() < Math.min(0.6, amount * 0.5)) {
+                const gy = groundY() + rand(2, 10);
+                stampDrip(x + rand(-10, 10), gy, rand(0.9, 1.8) * (state.goreLevel === 'light' ? 0.7 : 1));
+            }
+            return true;
+        }
+        // one small drip mark on the ground: a round drop with a thin wet rim and maybe a fleck beside it
+        function stampDrip(x, y, r) {
+            const col = BLOOD_PAL[Math.floor(rand(1, 4))];
+            bctx.save();
+            bctx.globalAlpha = 0.9;
+            bctx.fillStyle = col;
+            bctx.beginPath(); bctx.ellipse(x, y, r * 1.5, r * 0.45, 0, 0, BTAU); bctx.fill();
+            bctx.strokeStyle = 'rgba(66,3,7,0.55)'; bctx.lineWidth = 0.5; bctx.stroke();
+            if (Math.random() < 0.5) {
+                bctx.beginPath(); bctx.ellipse(x + rand(-5, 5), y + rand(-1, 1), Math.max(0.4, r * 0.35), 0.4, 0, 0, BTAU); bctx.fill();
+            }
+            bctx.restore();
+        }
+        // a whole splatter burst (no pool): an irregular star of spines, blobs and satellite droplets
+        function stampSplatter(x, y, size) {
+            bctx.save();
+            bctx.globalAlpha = 0.92;
+            bctx.lineCap = 'round';
+            const n = 7 + Math.floor(size);
+            for (let k = 0; k < n; k++) {
+                const a = rand(0, BTAU), len = size * rand(1.2, 3.4);
+                const col = BLOOD_PAL[Math.floor(rand(0, 4))];
+                bctx.strokeStyle = col; bctx.fillStyle = col;
+                const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len * 0.3;
+                bctx.lineWidth = rand(0.6, Math.max(0.8, size * 0.35));
+                bctx.beginPath(); bctx.moveTo(x, y); bctx.lineTo(ex, ey); bctx.stroke();
+                bctx.beginPath(); bctx.ellipse(ex, ey, rand(0.6, size * 0.3 + 0.6), rand(0.4, 0.9), 0, 0, BTAU); bctx.fill();
+                if (Math.random() < 0.6) {
+                    const d = len * rand(1.15, 1.6);
+                    bctx.beginPath(); bctx.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.3, rand(0.4, 1), 0.45, 0, 0, BTAU); bctx.fill();
                 }
             }
-            return false;
+            bctx.fillStyle = BLOOD_PAL[1];
+            bctx.beginPath(); bctx.ellipse(x, y, size * 0.9, size * 0.28, 0, 0, BTAU); bctx.fill();
+            bctx.strokeStyle = 'rgba(66,3,7,0.6)'; bctx.lineWidth = 0.6; bctx.stroke();
+            bctx.restore();
         }
 
         function splatOnGround(p, y) {
             if (state.goreLevel === 'none') return;
             if (p.late) {
-                growPuddleAt(p.x, p.r * 0.05);                             // late drips just feed the pool they land near
+                stampDrip(p.x, y, Math.max(0.7, p.r * 0.8));               // late drips leave their own little drip marks
                 return;
             }
             // tiny splash-back droplets just leave a fleck: otherwise every splash stamps more splashes
@@ -1850,9 +1892,9 @@
             }
             bctx.restore();
 
-            if (!growPuddleAt(p.x, p.r * 0.07) && p.r > 2.4) addPuddle(p.x, y, p.r * 3);
+            if (p.r > 2.4 && sp > 3) stampSplatter(p.x + p.vx * 0.6, y, p.r * 0.9);
             if (p.gen === 0 && p.r > 1.6 && sp > 5 && state.goreLevel !== 'light') {
-                const n = 1 + Math.floor(Math.random() * 3);
+                const n = 2 + Math.floor(Math.random() * 3);
                 for (let i = 0; i < n; i++) {
                     spawnDrop(p.x, y - 1, p.vx * 0.35 + rand(-1.2, 1.2), -sp * 0.22 * rand(0.4, 1.2), p.r * 0.4, 1, p.ci);
                 }
@@ -1908,7 +1950,7 @@
                             dx: clamp(p.x - pipe.x, -3, PIPE_W + 3),
                             w: p.r * rand(0.9, 1.4),
                             mass, run: 0, age: 0, ci: p.ci === undefined ? 1 : p.ci,
-                            drips: p.r > 2 ? 2 : 0, swell: 0, atEdge: false, dots
+                            drips: p.r > 2 ? 4 : (p.r > 1.2 ? 2 : 1), swell: 0, atEdge: false, dots
                         });
                         return true;
                     }
@@ -1927,11 +1969,14 @@
                         s.mass -= v * 0.01;                                // ... and thins out as it goes
                         if (s.side === 'top' && s.run >= s.d) { s.run = s.d; s.atEdge = true; }
                         if (s.side === 'bottom' && s.run > 150) s.mass = 0;
+                        if (s.side === 'bottom' && s.age % 70 === 0 && Math.random() < 0.35 * Math.min(1, s.mass)) {
+                            spawnDrop(pipe.x + s.dx + (s.dx < PIPE_W / 2 ? -RIM_O : RIM_O) * 0.2, pipeBottomY(pipe) + s.d + s.run, (pipe.vx !== undefined ? pipe.vx : -2), 0.3, Math.max(0.8, s.w * 0.5), 1, s.ci);
+                        }
                     }
-                    if (s.atEdge && s.drips > 0 && s.mass > 0.15) {
+                    if (s.atEdge && s.drips > 0 && s.mass > 0.05) {
                         s.swell += 0.012 + s.mass * 0.01;
                         if (s.swell >= 1) {
-                            s.swell = 0; s.drips--; s.mass -= 0.4;
+                            s.swell = 0; s.drips--; s.mass -= 0.2;
                             const pvx = pipe.vx !== undefined ? pipe.vx : -2;
                             const pvy = pipe.vy || 0;
                             spawnDrop(pipe.x + s.dx, pipe.top + 3, pvx + rand(-0.3, 0.3), pvy * 0.4 + 0.4, s.w * 0.8 + 0.8, 1, s.ci);
@@ -2014,8 +2059,8 @@
         function updateBlood() {
             const gy = groundY();
             // keep the newest ~750 drops; trimming happens here, never while the array is being walked
-            if (bloodDrops.length > 750) {
-                const cut = bloodDrops.length - 750;
+            if (bloodDrops.length > 900) {
+                const cut = bloodDrops.length - 900;
                 for (let i = 0; i < cut; i++) bloodDrops[i].dead = true;
                 bloodDrops.splice(0, cut);
             }
@@ -4346,7 +4391,7 @@
                     const a = k / sides * 6.283 + rand(-0.25, 0.25), d = rand(0.72, 1.12);
                     pts.push([Math.cos(a) * d, Math.sin(a) * d]);
                 }
-                const pal = pick(opt.hot ? ROCK_PAL_HOT : ROCK_PAL);
+                const pal = opt.pal || pick(opt.hot ? ROCK_PAL_HOT : ROCK_PAL);
                 rocks.push({
                     x: x + rand(-(opt.width || 0), opt.width || 0), y,
                     vx: rand(-spreadX, spreadX), vy: -rand(up * 0.35, up),
@@ -4432,7 +4477,7 @@
         // =====================================================
         const BOSS_MOVE_SPEED = 3.6;
         const bossHomeX = () => state.width - boss.w - (boss.kind === 'glove' ? 118 : 14);   // the glove's sleeve stays clear of the HUD buttons
-        const bossBox = () => boss.kind === 'glove'
+        const bossBox = () => boss.kind === 'dino' ? dinoBox() : boss.kind === 'glove'
             ? { l: boss.x + 10, r: boss.x + boss.w - 10, t: boss.y + 8, b: boss.y + (boss.vis || boss.h) }
             : { l: boss.x + 8, r: boss.x + boss.w - 8, t: boss.y + 12, b: boss.y + boss.h };
         const bossAggro = () => 1 + (1 - boss.hp / boss.maxHp) * 0.55;   // gets quicker as he gets hurt
@@ -4450,10 +4495,10 @@
         }
 
         function pickBossKind() {
-            // alternate between the two bosses; the very first one is random
-            if (state.lastBossKind === 'crusher') return 'glove';
-            if (state.lastBossKind === 'glove') return 'crusher';
-            return Math.random() < 0.5 ? 'crusher' : 'glove';
+            // cycle Crusher -> Mitt -> Chompsalot; the very first one is random
+            const order = ['crusher', 'glove', 'dino'];
+            const i = order.indexOf(state.lastBossKind);
+            return i < 0 ? pick(order) : order[(i + 1) % order.length];
         }
 
         function triggerBossEncounter(kind) {
@@ -4462,9 +4507,17 @@
             state.lastBossKind = kind;
             boss.kind = kind;
             const glove = kind === 'glove';
-            boss.name = glove ? 'MR. MITT' : 'BIG MR. CRUSHER';
-            boss.w = glove ? MITT_W : BOSS_W; boss.h = glove ? MITT_H : BOSS_H;
+            const dino = kind === 'dino';
+            boss.name = dino ? 'MR. CHOMPSALOT' : glove ? 'MR. MITT' : 'BIG MR. CRUSHER';
+            boss.w = glove ? MITT_W : dino ? 160 : BOSS_W; boss.h = glove ? MITT_H : dino ? 150 : BOSS_H;
             boss.fist = boss.fistT = 0; boss.vis = boss.h; boss.fg = false; boss.rise = 0; boss.slam2 = false; boss.rain = [];
+            boss.die = null;
+            dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
+            if (dino) {
+                boss.dsc = clamp(state.width / 1000, 0.6, 1); boss.dgy = undefined; boss.dbx = undefined;
+                const G = dinoGeo();
+                Object.assign(boss, { hx: G.restX, hy: G.restY, jaw: 0, lean: 0, bobY: 0, armT: 0, squish: 0, coughK: 0, snapNow: false, holding: false, aimSet: false });
+            }
             bossBalls = [];
             boss.active = true;
             state.bossIncoming = true;
@@ -4487,56 +4540,369 @@
         }
 
         function damageBoss(amount) {
-            if (!boss.active || boss.state === 'DEFEATED' || state.status !== 'PLAYING') return;   // nothing counts once the bird is dead
+            if (!boss.active || boss.state === 'DEFEATED' || boss.state === 'DYING' || state.status !== 'PLAYING') return;   // nothing counts once the bird is dead
             boss.hp = Math.max(0, boss.hp - amount);
             boss.flash = 10;
             sound.playHit();
             if (boss.kind === 'glove') {
                 boss.sq = -0.26; boss.rotV = (boss.rotV || 0) + rand(-0.22, 0.22);   // flinches
                 for (let k = 0; k < 9; k++) particles.push({ type: 'puff', x: boss.x + boss.w / 2 + rand(-20, 20), y: boss.y + (boss.vis || boss.h) * 0.4 + rand(-14, 14), vx: rand(-3, 3), vy: -rand(0.5, 3), color: k % 3 ? '#ffffff' : '#ffd23f', radius: rand(3, 7), alpha: 1, life: 0.45 });
+            } else if (boss.kind === 'dino') {
+                cartoonStars(boss.hx, boss.hy - 30 * (boss.dsc || 1), 4, 3);
+                for (let k = 0; k < 5; k++) particles.push({ x: boss.hx + rand(-20, 20), y: boss.hy - 20, vx: rand(-2, 2), vy: -rand(1, 3), color: '#5fc34a', radius: rand(1.5, 2.5), alpha: 1, life: 0.5 });
             } else rubble(boss.x + boss.w / 2, boss.y + boss.h / 2, 8, 5, 6);
             if (boss.hp <= 0) { defeatBoss(); return; }
             if (!boss.phase2 && boss.hp <= 50) {
                 boss.phase2 = true; boss.enrage = 100;
                 shakeScreen(); sound.playWarning(); state.hurtFlash = 6;
-                if (boss.kind !== 'glove') rubble(boss.x + boss.w / 2, boss.y + boss.h / 2, 14, 7, 8);
+                if (boss.kind === 'crusher') rubble(boss.x + boss.w / 2, boss.y + boss.h / 2, 14, 7, 8);
             }
         }
 
+        // 0 HP: each boss plays a cartoon death scene (state DYING), then the usual "BOSS DOWN!" (state DEFEATED)
         function defeatBoss() {
-            boss.state = 'DEFEATED';
-            boss.timer = 170;
+            boss.state = 'DYING';
             boss.beamActive = false; boss.beamCharge = 0;
             slamWarner.active = false;
-            bossLasers = []; bossSpikes = []; bossBalls = []; boss.fg = false; boss.rise = 0;
-            boss.bannerKind = 'down'; boss.banner = 0;
-            sound.playBossExplode();
-            state.flashEffectTimer = 25;
-            state.hurtFlash = 6;
-            shakeScreen();
-            const cx = boss.x + boss.w / 2, cy = boss.y + (boss.vis || boss.h) / 2;
+            bossLasers = []; bossSpikes = []; bossBalls = []; bossFalling = []; boss.fg = false;
+            if (boss.kind !== 'dino') boss.rise = 0;          // (the dino uses 'rise' for how far he's out of the ground)
+            boss.flash = 0;
+            const d = boss.die = { t: 0, pt: 0, phase: boss.kind === 'glove' ? 'lift' : boss.kind === 'dino' ? 'droop' : 'freeze', n: 0 };
+            dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
+            d.cx = boss.x + boss.w / 2; d.cy = boss.y + (boss.vis || boss.h) / 2;
             if (boss.kind === 'glove') {
-                spawnFantasyPoof(cx, cy, 44);                     // the glove pops into smoke, stars and stuffing
-                for (let k = 0; k < 14; k++) particles.push({ type: 'puff', x: cx + rand(-30, 30), y: cy + rand(-30, 30), vx: rand(-4, 4), vy: -rand(1, 5), color: k % 2 ? '#ffffff' : '#c9d1de', radius: rand(5, 11), alpha: 1, life: 0.7 });
+                d.x = d.cx; d.y = d.cy; d.vx = 0; d.vy = 0; d.rot = boss.rot || 0; d.vr = 0;
+                d.scale = 1; d.wob = 0; d.palm = false; d.flag = 0; d.glass = []; d.ax = d.x;
+                boss.y = -999;                                   // the real hitbox leaves; the scene is drawn from boss.die
+            } else if (boss.kind === 'dino') {
+                const G = dinoGeo(); d.cx = G.cx - 40 * G.S; d.cy = G.gy - 200 * G.S;
             } else {
-                spawnGoreExplosion(cx, cy, 60, 0, -2, true);
-                rubble(cx, cy, 36, 9, 11);
+                d.cracks = [];
+                for (let k = 0; k < 9; k++) {
+                    let x = boss.w / 2 + rand(-16, 16), y = boss.h / 2 + rand(-20, 20), a = rand(0, 6.283);
+                    const pts = [[x, y]];
+                    for (let q = 0; q < 4; q++) {
+                        a += rand(-0.6, 0.6);
+                        x = clamp(x + Math.cos(a) * rand(10, 18), 4, boss.w - 4); y = clamp(y + Math.sin(a) * rand(10, 18), 4, boss.h - 4);
+                        pts.push([x, y]);
+                    }
+                    d.cracks.push(pts);
+                }
             }
-            spawnPowerUpOrb(cx - 34, cy);
-            spawnPowerUpOrb(cx + 34, cy);
-            state.score += 5;
+            sound.playWarning();
             try {
-                achUnlock(boss.kind === 'glove' ? 'beat_mitt' : 'beat_crusher');
-                if (achState.unlocked.beat_mitt && achState.unlocked.beat_crusher) achUnlock('beat_both');
+                achUnlock(boss.kind === 'glove' ? 'beat_mitt' : boss.kind === 'dino' ? 'beat_dino' : 'beat_crusher');
+                if (achState.unlocked.beat_mitt && achState.unlocked.beat_crusher && achState.unlocked.beat_dino) achUnlock('beat_both');
             } catch (e) {}
             state.bossDefeatedThisRun = true;
             state.lastDeathWasBoss = false;
-            if (state.bossOnlyRun) state.invuln = 99999;   // nothing can kill you during the victory before the fade
+            state.invuln = state.bossOnlyRun ? 99999 : Math.max(state.invuln, 900);   // nothing can hurt you during the scene
+        }
+
+        function finishBossDeath() {
+            const d = boss.die;
+            boss.state = 'DEFEATED';
+            boss.timer = 170;
+            boss.bannerKind = 'down'; boss.banner = 0;
+            const ox = boss.kind === 'glove' ? d.x : d.cx, oy = boss.kind === 'glove' ? d.y - 60 : d.cy;
+            spawnPowerUpOrb(ox - 34, Math.min(oy, groundY() - 80));
+            spawnPowerUpOrb(ox + 34, Math.min(oy, groundY() - 80));
+            state.score += 5;
+            if (!state.bossOnlyRun) state.invuln = Math.max(state.invuln, 90);
             syncStartModal();
             updateHUD();
         }
 
+        function cartoonStars(x, y, n, spd) {
+            for (let k = 0; k < n; k++) particles.push({ type: 'star', x, y, vx: rand(-spd, spd), vy: -rand(spd * 0.4, spd * 1.2), rot: rand(0, 6.28), vr: rand(-0.3, 0.3), size: rand(6, 11), color: '#ffd23f', alpha: 1, life: rand(0.7, 1.1) });
+        }
+        function dustCloud(x, y, n, col) {
+            for (let k = 0; k < n; k++) plantPuff(x + rand(-30, 30), y + rand(-14, 10), rand(-2.4, 2.4), -rand(0.4, 2), pick(col || ['#e9e2cf', '#d8cfb8', '#ffffff']), rand(8, 13), rand(20, 32));
+        }
+
+        // ---- Big Mr. Crusher: freeze, cracks spread, horns pop off, crumbles into rubble and dust ----
+        function updateCrusherDeath(sf) {
+            const d = boss.die;
+            d.t += sf; d.pt += sf;
+            const P = boss.phase2 ? ['#c99aa0', '#744550'] : ['#a4aec0', '#5b6578'];
+            if (d.phase === 'freeze') {
+                boss.shake = 3;
+                if (d.pt > 22) { d.phase = 'crack'; d.pt = 0; }
+            } else if (d.phase === 'crack') {
+                boss.shake = 3;
+                const want = Math.min(d.cracks.length, Math.floor(d.pt / 9) + 1);
+                while (d.n < want) {
+                    d.n++;
+                    sound.playHit();
+                    spawnRocks(d.cx + rand(-boss.w / 3, boss.w / 3), d.cy + rand(-boss.h / 3, boss.h / 3), 3, 3, 4, { minR: 2, maxR: 4, pal: P });
+                }
+                if (!d.hornsOff && d.pt > 40) {
+                    d.hornsOff = true;
+                    sound.playBoing();
+                    [boss.x + 18, boss.x + boss.w / 2, boss.x + boss.w - 24].forEach(hx => spawnRocks(hx, boss.y - 8, 1, 4, 8, { minR: 7, maxR: 9, pal: ['#e9dfc4', '#c9bd9c'] }));
+                    addPopup(d.cx, boss.y - 30, 'POP!', 4);
+                }
+                if (d.pt > d.cracks.length * 9 + 16) {
+                    d.phase = 'crumble'; d.pt = 0; d.gone = true;
+                    boss.y = -999;
+                    sound.playBossExplode();
+                    shakeScreen();
+                    state.flashEffectTimer = 18;
+                    for (let k = 0; k < 18; k++) spawnRocks(d.cx + rand(-44, 44), d.cy + rand(-50, 50), 1, 8, 11, { minR: 7, maxR: 17, pal: P });
+                    spawnRocks(d.cx, d.cy - 10, 1, 3, 9, { minR: 20, maxR: 22, pal: ['#4b566b', '#3d4658'] });   // the face plate
+                    dustCloud(d.cx, d.cy, 14);
+                    cartoonStars(d.cx, d.cy, 9, 5);
+                    addPopup(d.cx, d.cy - 40, 'CRUMBLE!', 9);
+                }
+            } else if (d.phase === 'crumble') {
+                if (d.pt > 55) { d.phase = 'done'; finishBossDeath(); }
+            }
+        }
+
+        // ---- Mr. Mitt: last SMACK, noodle fingers, dizzy bouncing, smacks into the SCREEN, slides down, lands palm-up ----
+        function updateMittDeath(sf, gy) {
+            const d = boss.die, W = state.width, H = state.height;
+            d.t += sf; d.pt += sf;
+            d.ax += (clamp(d.x, -60, W + 60) - d.ax) * 0.06 * sf;      // shoulder (above the screen) drags behind the hand
+            const go = ph => { d.phase = ph; d.pt = 0; };
+            const bounceWalls = (R, floorY, e) => {
+                if (d.x < R) { d.x = R; d.vx = Math.abs(d.vx) * e; sound.playBoing(); }
+                if (d.x > W - R) { d.x = W - R; d.vx = -Math.abs(d.vx) * e; sound.playBoing(); }
+                if (d.y < R) { d.y = R; d.vy = Math.abs(d.vy) * e; }
+                if (d.y > floorY) { d.y = floorY; d.vy = -Math.abs(d.vy) * e; if (Math.abs(d.vy) > 2) sound.playBoing(); return true; }
+                return false;
+            };
+            if (d.phase === 'lift') {
+                d.y += ((gy - 200) - d.y) * 0.18 * sf; d.rot *= 0.8;
+                if (d.pt > 18) { go('slap'); d.vy = 4; }
+            } else if (d.phase === 'slap') {
+                d.vy = Math.min(30, d.vy + 2.2 * sf); d.y += d.vy * sf;
+                if (d.y + 50 >= gy) {
+                    d.y = gy - 50;
+                    sound.playHit(); sound.playBoing();
+                    shakeScreen();
+                    state.timeScale = 0.5; state.slowSteps = 30;
+                    addPopup(d.x, d.y - 70, 'SMACK!', 9);
+                    dustCloud(d.x, gy - 6, 8);
+                    cartoonStars(d.x, gy - 20, 6, 4);
+                    d.wob = 1;                                           // fingers go limp and wiggly
+                    d.vx = (d.x > W / 2 ? -1 : 1) * rand(7, 10); d.vy = -14; d.vr = rand(-0.4, 0.4);
+                    go('dizzy');
+                }
+            } else if (d.phase === 'dizzy') {                         // bounces around the screen, totally out of it
+                d.vy += 0.42 * sf; d.x += d.vx * sf; d.y += d.vy * sf; d.rot += d.vr * sf;
+                if (Math.floor(d.pt) % 14 === 0) { d.vx += rand(-5, 5); d.vy -= rand(2, 6); d.vr += rand(-0.3, 0.3); }
+                d.vx = clamp(d.vx, -13, 13); d.vr = clamp(d.vr, -0.5, 0.5);
+                bounceWalls(48, gy - 48, 0.8);
+                if (d.pt > 85) { go('camera'); d.fx = d.x; d.fy = d.y; d.fr = d.rot; sound.playWarning(); }
+            } else if (d.phase === 'camera') {                       // flies straight at the viewer
+                const k = Math.min(1, d.pt / 24), e = k * k;
+                d.x = d.fx + (W / 2 - d.fx) * e; d.y = d.fy + (H * 0.42 - d.fy) * e;
+                d.rot = d.fr * (1 - e); d.scale = 1 + e * 2.6; d.palm = k > 0.5;
+                if (k >= 1) {
+                    go('glass');
+                    sound.playHit(); sound.playBoing();
+                    shakeScreen();
+                    addPopup(W / 2, H * 0.2, 'BONK!', 9);
+                    // crack lines in the "glass" around where he hit
+                    d.gx = d.x; d.gy = d.y;
+                    for (let q = 0; q < 11; q++) {
+                        let a = q / 11 * 6.283 + rand(-0.2, 0.2), x = d.gx, y = d.gy, r0 = rand(30, 60);
+                        const pts = [[x + Math.cos(a) * r0, y + Math.sin(a) * r0]];
+                        x = pts[0][0]; y = pts[0][1];
+                        for (let s2 = 0; s2 < 4; s2++) { a += rand(-0.35, 0.35); const L = rand(30, 70); x += Math.cos(a) * L; y += Math.sin(a) * L; pts.push([x, y]); }
+                        d.glass.push(pts);
+                    }
+                    d.ring = [];
+                    for (let q = 0; q < 10; q++) d.ring.push(rand(0.8, 1.2));
+                }
+            } else if (d.phase === 'glass') {                        // squished flat against the screen
+                d.scale = 3.6 + Math.sin(d.pt * 0.5) * 0.04 * Math.max(0, 1 - d.pt / 20);
+                if (Math.floor(d.pt) === 24) sound.playDrip();
+                if (d.pt > 42) go('slide');
+            } else if (d.phase === 'slide') {                        // ...and slowly slides down the glass, squeaking
+                d.y += 1.7 * sf;
+                if (Math.floor(d.pt) % 12 === 0) sound.playDrip();
+                if (d.pt > 42) { go('peel'); d.fy = d.y; }
+            } else if (d.phase === 'peel') {                         // falls back into the scene
+                const k = Math.min(1, d.pt / 20);
+                d.scale = 3.6 - 2.6 * k; d.rot += 0.22 * sf;
+                d.y = d.fy + (gy - 260 - d.fy) * k;
+                if (k >= 1) { go('fall'); d.vy = 0; d.vx = rand(-3, 3); d.palm = true; }
+            } else if (d.phase === 'fall') {                         // lands on the floor and settles palm-up
+                d.vy += 0.6 * sf; d.x += d.vx * sf; d.y += d.vy * sf; d.vx *= 0.99;
+                const tgt = Math.PI / 2 + Math.round((d.rot - Math.PI / 2) / 6.283) * 6.283;
+                d.rot += (tgt - d.rot) * 0.08 * sf;
+                const restY = gy - 30;
+                if (d.x < 50) { d.x = 50; d.vx = Math.abs(d.vx) * 0.5; }
+                if (d.x > W - 50) { d.x = W - 50; d.vx = -Math.abs(d.vx) * 0.5; }
+                if (d.y >= restY) {
+                    d.y = restY;
+                    if (Math.abs(d.vy) > 2.5) { d.vy = -Math.abs(d.vy) * 0.4; sound.playBoing(); dustCloud(d.x, gy - 4, 3); }
+                    else d.vy = 0;
+                    d.vx *= 0.8;
+                }
+                d.wob = Math.max(0.25, d.wob - 0.004 * sf);
+                if ((d.vy === 0 && Math.abs(d.vx) < 0.3 && Math.abs(tgt - d.rot) < 0.05) || d.pt > 260) { d.rot = tgt; go('rest'); }
+            } else if (d.phase === 'rest') {                         // dizzy stars, then a little white flag of surrender
+                d.wob = Math.max(0.12, d.wob - 0.004 * sf);
+                d.flag = clamp((d.pt - 25) / 20, 0, 1);
+                if (d.pt > 110) { go('done'); finishBossDeath(); }
+            }
+        }
+
+        function mittDeathHand(d) {
+            // after the smack the fingers just go limp and wiggly (one clean shape each), curling a little in turn
+            const t = d.t;
+            const shape = (x, y, w, len, rot) => () => {
+                ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+                ctx.beginPath(); ctx.roundRect(-w / 2, -2, w, Math.max(w, len), w / 2);
+                ctx.restore();
+            };
+            const list = [() => { ctx.beginPath(); ctx.roundRect(-18, -2, 36, 32, 13); }];
+            const fx = [-12.5, -4.2, 4.2, 12.5], fl = [24, 29, 28, 23], fa = [0.26, 0.09, -0.09, -0.26];
+            const spread = d.phase === 'glass' || d.phase === 'slide' ? 1 : 0.35;
+            for (let i = 0; i < 4; i++) {
+                const a0 = fa[i] * (1 + spread * 1.6) + d.wob * Math.sin(t * 0.3 + i * 1.3) * 0.32;
+                const curl = d.wob * (0.5 + 0.5 * Math.sin(t * 0.22 + i * 1.7)) * 0.4;
+                list.push(shape(fx[i], 22, 10.4, (fl[i] + 4) * (1 - curl), a0));
+            }
+            list.push(shape(-14, 9, 11, 22, 1.05 + d.wob * Math.sin(t * 0.38) * 0.35));
+            drawGloveShapes(list);
+            if (d.palm) {                                            // palm side: soft pad and crease lines
+                ctx.fillStyle = 'rgba(230,224,240,0.9)';
+                ctx.beginPath(); ctx.ellipse(0, 14, 12, 10, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = 'rgba(27,36,51,0.5)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(-10, 10); ctx.quadraticCurveTo(0, 16, 10, 8); ctx.moveTo(-8, 19); ctx.quadraticCurveTo(0, 23, 8, 17); ctx.stroke();
+            } else {
+                ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+                [[-7, -2.5], [0, 0], [7, 2.5]].forEach(([x, bend]) => { ctx.beginPath(); ctx.moveTo(x * 0.7, 4); ctx.quadraticCurveTo(x + bend, 14, x + bend * 0.6, 28); ctx.stroke(); });
+            }
+            ctx.fillStyle = '#3a4357'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;     // cuff
+            ctx.beginPath(); ctx.roundRect(-13.5, -7, 27, 6, 3); ctx.fill(); ctx.stroke();
+        }
+
+        // rubber-hose sleeve from a shoulder above the screen down to the wrist, getting wider as it comes toward the camera
+        function drawMittArm(d, sq) {
+            const S = MITT_S * d.scale, sx = sq ? sq[0] : 1, sy = sq ? sq[1] : 1;
+            const c = Math.cos(d.rot), sn = Math.sin(d.rot);
+            const toW = (lx, ly) => [d.x + (lx * S * sx) * c - ((ly - 22) * S * sy) * sn, d.y + (lx * S * sx) * sn + ((ly - 22) * S * sy) * c];
+            const P3 = toW(0, -5);
+            const up = [sn, -c];                                     // away from the fingers
+            const reach = 70 * Math.sqrt(d.scale);
+            const P2 = [P3[0] + up[0] * reach, P3[1] + up[1] * reach];
+            const P0 = [d.ax, -90], P1 = [d.ax, -90 + (Math.max(P3[1], 0) + 90) * 0.45];
+            const w0 = 40, w1 = 24 * S;
+            const N = 28, L = [], R = [];
+            const bez = (t, i) => (1 - t) ** 3 * P0[i] + 3 * (1 - t) ** 2 * t * P1[i] + 3 * (1 - t) * t * t * P2[i] + t ** 3 * P3[i];
+            for (let k = 0; k <= N; k++) {
+                const t = k / N, x = bez(t, 0), y = bez(t, 1);
+                const t2 = Math.min(1, t + 0.01), t1 = Math.max(0, t - 0.01);
+                let tx = bez(t2, 0) - bez(t1, 0), ty = bez(t2, 1) - bez(t1, 1);
+                const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+                const w = (w0 + (w1 - w0) * t) / 2;
+                L.push([x - ty * w, y + tx * w]); R.push([x + ty * w, y - tx * w]);
+            }
+            ctx.save();
+            ctx.beginPath();
+            L.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+            for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+            ctx.closePath();
+            ctx.fillStyle = '#10141c'; ctx.fill();
+            ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = Math.max(3, w1 * 0.12); ctx.lineCap = 'round';   // sheen down one side
+            ctx.beginPath();
+            for (let k = 0; k <= N; k++) { const m = [L[k][0] * 0.7 + R[k][0] * 0.3, L[k][1] * 0.7 + R[k][1] * 0.3]; k ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]); }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawMittDying() {
+            const d = boss.die, gy = groundY();
+            if (!d) return;
+            if (d.scale < 1.3) {                                     // floor shadow while he's in the scene
+                const air = clamp((gy - d.y) / 300, 0, 1);
+                ctx.fillStyle = `rgba(27,36,51,${0.28 * (1 - air * 0.7)})`;
+                ctx.beginPath(); ctx.ellipse(d.x, gy + 3, 46 * (0.7 + air * 0.2), 7, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            if (d.phase === 'camera' || d.phase === 'glass' || d.phase === 'slide' || d.phase === 'peel') return;   // drawn in front of everything instead
+            drawMittArm(d);
+            ctx.save();
+            ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+            ctx.scale(MITT_S * d.scale, MITT_S * d.scale);
+            ctx.translate(0, -22);
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            gloveOutline = 2.5; gloveFillCol = '#ffffff';
+            mittDeathHand(d);
+            gloveOutline = 5.4;
+            ctx.restore();
+            // dizzy stars + surrender flag once he's lying down
+            if (d.phase === 'rest' || boss.state === 'DEFEATED') {
+                for (let s2 = 0; s2 < 3; s2++) {
+                    const a = state.frameCount * 0.09 + s2 * 2.094;
+                    bossStar(d.x + Math.cos(a) * 30, d.y - 46 + Math.sin(a) * 6, 7, state.frameCount * 0.12);
+                }
+                const f = boss.state === 'DEFEATED' ? 1 : d.flag;
+                if (f > 0) {
+                    const px = d.x + 6, py = d.y - 26, top = py - 52 * f, wv = Math.sin(state.frameCount * 0.25);
+                    ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, top); ctx.stroke();
+                    ctx.strokeStyle = '#a16207'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, top); ctx.stroke();
+                    if (f > 0.6) {
+                        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.lineJoin = 'round';
+                        ctx.beginPath(); ctx.moveTo(px, top);
+                        ctx.quadraticCurveTo(px + 12, top - 4 + wv * 3, px + 26, top + 2 + wv * 2);
+                        ctx.lineTo(px + 26, top + 18 + wv * 2);
+                        ctx.quadraticCurveTo(px + 12, top + 12 + wv * 3, px, top + 16);
+                        ctx.closePath(); ctx.fill(); ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // fourth wall: the giant hand pressed against the player's screen, with cracked "glass"
+        function drawFourthWall() {
+            if (!boss.active || boss.kind !== 'glove' || !boss.die) return;
+            const d = boss.die;
+            const close = d.phase === 'camera' || d.phase === 'glass' || d.phase === 'slide' || d.phase === 'peel';
+            if (d.glass && d.glass.length) {
+                let a = 1;
+                if (boss.state === 'DEFEATED') a = clamp(boss.timer / 60, 0, 1);
+                ctx.save();
+                ctx.globalAlpha = a;
+                ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+                const path = () => { ctx.beginPath(); for (const pts of d.glass) { pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); } };
+                path(); ctx.strokeStyle = 'rgba(27,36,51,0.55)'; ctx.lineWidth = 4; ctx.stroke();
+                path(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
+                // splintered ring around the impact point
+                ctx.beginPath();
+                d.ring.forEach((k, i) => { const ang = i / d.ring.length * 6.283, r = 44 * k; const x = d.gx + Math.cos(ang) * r, y = d.gy + Math.sin(ang) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+                ctx.closePath(); ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill();
+                ctx.restore();
+            }
+            if (!close) return;
+            const sq = d.phase === 'glass' || d.phase === 'slide' ? [1.1, 0.95] : [1, 1];
+            drawMittArm(d, sq);
+            ctx.save();
+            ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+            ctx.scale(MITT_S * d.scale * sq[0], MITT_S * d.scale * sq[1]);
+            ctx.translate(0, -22);
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            gloveOutline = 2.2; gloveFillCol = '#ffffff';
+            mittDeathHand(d);
+            gloveOutline = 5.4;
+            ctx.restore();
+        }
+
         function endBossFight() {
+            if (boss.kind === 'glove' && boss.die && boss.die.x !== undefined) {    // the resting glove poofs away
+                dustCloud(boss.die.x, boss.die.y, 10, ['#ffffff', '#e9edf3', '#d3d9e2']);
+                cartoonStars(boss.die.x, boss.die.y, 6, 4);
+                sound.playPoof();
+            }
+            boss.die = null;
             boss.active = false;
             boss.state = 'HIDDEN';
             boss.y = -300;
@@ -4569,6 +4935,8 @@
             boss.beamActive = false; boss.beamCharge = 0; boss.flash = 0;
             boss.banner = 0; boss.bannerKind = ''; boss.phase2 = false; boss.enrage = 0; boss.combo = 0;
             bossLasers = []; bossSpikes = []; bossFalling = []; bossBalls = []; boss.fg = false; boss.rise = 0; boss.fist = boss.fistT = 0;
+            boss.die = null;
+            dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
             slamWarner.active = false; slamWarner.locked = false;
             state.bossIncoming = false; state.bossDefeatedThisRun = false; state.bossAnnounced = false;
             move.left = move.right = false;
@@ -4747,6 +5115,7 @@
             const ag = bossAggro();
 
             if (boss.kind === 'glove') { updateGloveBoss(sf, gy, homeX, ag); return; }
+            if (boss.kind === 'dino') { updateDinoBoss(sf, gy, ag); return; }
 
             switch (boss.state) {
                 case 'WARNING':
@@ -4888,6 +5257,10 @@
                     break;
                 }
 
+                case 'DYING':
+                    updateCrusherDeath(sf);
+                    break;
+
                 case 'DEFEATED':
                     if (--boss.timer <= 0) endBossFight();
                     break;
@@ -5017,6 +5390,7 @@
         }
 
         function updateGloveBoss(sf, gy, homeX, ag) {
+            if (boss.state === 'DYING') { updateMittDeath(sf, gy); return; }
             mittSpring(sf);
             const slow = state.activePowerups.slowmo ? 0.65 : 1;
             const anger = mittAnger();
@@ -5314,8 +5688,737 @@
             }
         }
 
+        // =====================================================
+        //            MR. CHOMPSALOT (DINO BOSS)
+        // A grumpy T-rex dug up by Plukbering. Only his head, torso and tiny arms poke out of the ground.
+        //  Normal : 5 bites where you WERE, dirt-clod throws, stomps that send ground waves, a roar shockwave
+        //           ...after which he gets a sore throat and coughs: the only time you can hurt him (bounce on his head)
+        //  Enraged: 7 bites aimed where you're GOING, faster clods, stomps that also shake dirt down from the sky,
+        //           a double roar, and a longer coughing fit
+        // =====================================================
+        let dinoClods = [], dinoWaves = [], dinoRings = [], dinoMarks = [], dinoGoo = [], dinoSlime = [];
+        const DINO_COL = { body: '#5fbf4a', dark: '#3f8f34', belly: '#dbe9a6', spot: '#4aa63c', spike: '#2f7a2a' };
+
+        function dinoGeo() {
+            const S = boss.dsc || 1;
+            const gy = boss.dgy !== undefined ? boss.dgy : groundY();
+            const cx = boss.dbx !== undefined ? boss.dbx : state.width - 150 * S;
+            const sink = (1 - (boss.rise === undefined ? 1 : boss.rise)) * 270 * S;   // rising out of the ground
+            const top = gy - 150 * S + sink;
+            return { S, gy, cx, top, sink,
+                neckX: cx - 36 * S, neckY: top + 26 * S,
+                restX: cx - 88 * S, restY: top - 50 * S,
+                shoulderX: cx - 70 * S, shoulderY: top + 74 * S };
+        }
+        const dinoBox = () => { const G = dinoGeo(); return { l: G.cx - 75 * G.S, r: G.cx + 85 * G.S, t: G.top, b: G.gy }; };
+        const dinoAnger = () => boss.phase2 || boss.hp <= 50;
+        const dinoTip = () => { const S = boss.dsc || 1; return { x: boss.hx - 86 * S, y: boss.hy + 12 * S }; };   // front of the snout
+        const dinoMouth = () => { const S = boss.dsc || 1; return { x: boss.hx - 60 * S, y: boss.hy + 14 * S }; };
+
+        function spawnClod(x, y, vx, vy, warn) {
+            const r = rand(9, 13) * (boss.dsc || 1);
+            const pts = [];
+            for (let k = 0; k < 10; k++) pts.push(rand(0.82, 1.12));
+            dinoClods.push({ x, y, vx, vy, r, rot: rand(0, 6.28), vr: rand(-0.2, 0.2), pts, warn: warn || 0, grass: 2 + Math.floor(rand(0, 3)) });
+        }
+        function clodBurst(c, y) {
+            sound.playHit();
+            for (let k = 0; k < 9; k++) particles.push({ x: c.x, y, vx: rand(-3, 3), vy: -rand(1, 4), color: pick(['#8b5a2b', '#6b4220', '#b07a45']), radius: rand(1.6, 3.4), alpha: 1, life: 0.55 });
+            for (let k = 0; k < 4; k++) particles.push({ x: c.x, y: y - 2, vx: rand(-2, 2), vy: -rand(1.5, 3.5), color: '#5fc34a', radius: rand(1.2, 2.2), alpha: 1, life: 0.5 });
+            dustCloud(c.x, y - 4, 2, ['#d8c3a0', '#c9b38c']);
+        }
+
+        function dinoBump() {
+            // during the coughing fit his head is the weak spot: bounce on it for combo damage
+            if (state.status !== 'PLAYING' || boss.hitCool > 0) return;
+            const S = boss.dsc || 1;
+            if (Math.hypot(bird.x - (boss.hx - 6 * S), bird.y - (boss.hy - 14 * S)) > 52 * S) return;
+            boss.hitCool = 24;
+            bird.velocity = -7.4;
+            bird.y = Math.min(bird.y, boss.hy - 62 * S);
+            boss.combo++;
+            const gain = Math.min(boss.combo, 5);
+            state.score += state.activePowerups.multiplier ? gain * 2 : gain;
+            updateHUD();
+            addPopup(bird.x, bird.y - 22, '+' + gain, gain);
+            if (boss.combo >= 3) addPopup(bird.x, bird.y - 48, 'COMBO x' + boss.combo, 9);
+            if (boss.combo >= 5) achUnlock('combo5');
+            boss.squish = 1;
+            damageBoss(6 + Math.min(boss.combo, 4));
+        }
+
+        function updateDinoBoss(sf, gy, ag) {
+            const G = dinoGeo(), S = G.S, W = state.width;
+            const anger = dinoAnger(), slow = state.activePowerups.slowmo ? 0.65 : 1;
+            boss.armT = (boss.armT || 0) + sf;
+            boss.snapNow = false;
+            if (boss.squish > 0) boss.squish = Math.max(0, boss.squish - 0.08 * sf);
+            if (boss.coughK > 0) boss.coughK = Math.max(0, boss.coughK - 0.07 * sf);
+
+            // ---- projectiles ----
+            for (let i = dinoClods.length - 1; i >= 0; i--) {
+                const c = dinoClods[i];
+                if (c.warn > 0) { c.warn -= sf; continue; }
+                c.vy += 0.3 * sf; c.x += c.vx * sf; c.y += c.vy * sf; c.rot += c.vr * sf;
+                if (c.y >= G.gy - c.r * 0.5) { clodBurst(c, G.gy - 2); dinoClods.splice(i, 1); continue; }
+                if (c.x < -40 || c.x > W + 40 || c.y < -400) dinoClods.splice(i, 1);
+            }
+            for (let i = dinoWaves.length - 1; i >= 0; i--) {
+                const w = dinoWaves[i];
+                w.x += w.vx * sf; w.age += sf;
+                if (Math.floor(w.age) % 4 === 0) plantPuff(w.x - Math.sign(w.vx) * 14 * S, G.gy - 4, rand(-0.6, 0.6), -rand(0.4, 1.2), pick(['#e2d3b5', '#d8c3a0']), 5 * S, 12 * S);
+                if (w.x < -50 || w.x > W + 50) dinoWaves.splice(i, 1);
+            }
+            for (let i = dinoRings.length - 1; i >= 0; i--) {
+                const r = dinoRings[i];
+                r.r += r.sp * sf;
+                if (r.r > r.max) dinoRings.splice(i, 1);
+            }
+            for (let i = dinoMarks.length - 1; i >= 0; i--) { if ((dinoMarks[i].life -= sf) <= 0) dinoMarks.splice(i, 1); }
+            for (let i = dinoGoo.length - 1; i >= 0; i--) {                  // spat phlegm: wobbly green blobs
+                const g = dinoGoo[i];
+                g.vy += 0.28 * sf; g.x += g.vx * sf; g.y += g.vy * sf; g.ph += 0.3 * sf;
+                if (Math.random() < 0.2) particles.push({ x: g.x, y: g.y, vx: g.vx * 0.2, vy: 0.5, color: '#9be15d', radius: rand(1.2, 2.2), alpha: 1, life: 0.35 });
+                if (g.y >= G.gy - 2) {
+                    dinoSlime.push({ x: g.x, r: g.r * 2.3, life: 200, max: 200, seed: Math.random() * 6 });
+                    sound.playDrip();
+                    for (let k = 0; k < 6; k++) particles.push({ x: g.x, y: G.gy - 2, vx: rand(-2.5, 2.5), vy: -rand(1, 3), color: pick(['#9be15d', '#7cc947']), radius: rand(1.5, 2.6), alpha: 1, life: 0.45 });
+                    dinoGoo.splice(i, 1); continue;
+                }
+                if (g.x < -30 || g.x > W + 30) dinoGoo.splice(i, 1);
+            }
+            for (let i = dinoSlime.length - 1; i >= 0; i--) { if ((dinoSlime[i].life -= sf) <= 0) dinoSlime.splice(i, 1); }
+
+            // ---- where the head wants to be (springs toward it) ----
+            let thx = G.restX + Math.sin(boss.armT * 0.04) * 6 * S, thy = G.restY + Math.sin(boss.armT * 0.06) * 5 * S;
+            let jawT = 0.08 + 0.06 * Math.max(0, Math.sin(boss.armT * 0.09)), leanT = 0, headK = 0.12, bobT = 0;
+            boss.look = clamp((bird.y - boss.hy) / 200, -1, 1);
+
+            switch (boss.state) {
+                case 'WARNING':
+                    boss.rise = 0;
+                    if (--boss.timer <= 0) { boss.state = 'ENTERING'; sound.playWarning(); }
+                    break;
+                case 'ENTERING': {
+                    const first = (boss.rise || 0) === 0;
+                    boss.rise = Math.min(1, (boss.rise || 0) + 0.012 * sf);
+                    const dirtBurst = (n, up) => {
+                        for (let k = 0; k < n; k++) particles.push({ x: G.cx + rand(-90, 90) * S, y: G.gy - 2, vx: rand(-4, 4), vy: -rand(up * 0.4, up), color: pick(['#8b5a2b', '#6b4220', '#b07a45', '#5fc34a', '#4aa63c']), radius: rand(1.8, 4.2), alpha: 1, life: rand(0.6, 0.9) });
+                    };
+                    if (first) {                                       // the ground erupts
+                        shakeScreen(); sound.playHit(); sound.playSplat();
+                        dirtBurst(40, 9);
+                        dustCloud(G.cx, G.gy - 6, 10, ['#e2d3b5', '#d8c3a0', '#c9b38c']);
+                        for (let k = 0; k < 5; k++) spawnClod(G.cx + rand(-80, 80) * S, G.gy - 10, rand(-3, 3), -rand(5, 9));
+                    }
+                    if (Math.floor(boss.armT) % 4 === 0) dirtBurst(4, 6);
+                    if (Math.floor(boss.armT) % 6 === 0) dustCloud(G.cx + rand(-60, 60) * S, G.gy - 4, 2, ['#e2d3b5', '#d8c3a0', '#c9b38c']);
+                    if (Math.floor(boss.armT) % 12 === 0) { shakeScreen(); sound.playHit(); }
+                    if (boss.rise >= 1) {
+                        boss.state = 'HOVER'; boss.timer = 50 / ag;
+                        addPopup(boss.hx, boss.hy - 70 * S, 'RAWR!', 9);
+                        dirtBurst(24, 7);
+                        dustCloud(G.cx, G.gy - 6, 8, ['#e2d3b5', '#d8c3a0', '#c9b38c']);
+                    }
+                    break;
+                }
+                case 'HOVER':
+                    boss.timer -= sf;
+                    if (boss.timer <= 0) {
+                        const list = anger ? [0, 2, 1, 3] : [0, 1, 2, 3];
+                        const atk = list[boss.atkN++ % list.length];
+                        if (atk === 0) { boss.state = 'BITE'; boss.sub = 'aim'; boss.bites = 0; boss.timer = 0; }
+                        else if (atk === 1) { boss.state = 'TOSS'; boss.sub = 'scoop'; boss.timer = 30; boss.thrown = 0; }
+                        else if (atk === 2) { boss.state = 'STOMP'; boss.sub = 'wind'; boss.timer = 22; boss.stomps = 0; }
+                        else { boss.state = 'ROAR'; boss.sub = 'inhale'; boss.timer = 40; boss.roarMax = (anger ? 400 : 300) * S; }
+                    }
+                    break;
+
+                case 'BITE': {                                         // snaps at where the bird was (or will be, when enraged)
+                    const aimT = anger ? 15 : 24, N = anger ? 7 : 5;
+                    if (boss.sub === 'aim') {
+                        if (boss.timer <= 0 && !boss.aimSet) {
+                            boss.aimSet = true; boss.timer = aimT;
+                            const lead = anger ? 9 : 0;
+                            boss.tx = clamp(bird.x + (anger ? 2 : 0) * lead, 20, W - 20);
+                            boss.ty = clamp(bird.y + bird.velocity * lead, 20, G.gy - 20);
+                            dinoMarks.push({ x: boss.tx, y: boss.ty, life: aimT + 8, max: aimT + 8 });
+                        }
+                        thx = G.restX + 34 * S; thy = G.restY - 14 * S; jawT = 0.2;   // rears back
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) { boss.sub = 'lunge'; boss.timer = 7; boss.aimSet = false; }
+                    } else if (boss.sub === 'lunge') {
+                        thx = boss.tx + 86 * S; thy = boss.ty - 12 * S; jawT = 1; headK = 0.45;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.jaw = 0; boss.snapNow = true; sound.playChomp();
+                            addPopup(boss.tx, boss.ty - 30, 'CHOMP!', 9);
+                            boss.sub = 'recover'; boss.timer = anger ? 7 : 11;
+                        }
+                    } else {
+                        jawT = 0; headK = 0.2;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            if (++boss.bites >= N) { boss.state = 'HOVER'; boss.timer = 50 / ag; }
+                            else { boss.sub = 'aim'; boss.timer = 0; }
+                        }
+                    }
+                    break;
+                }
+
+                case 'TOSS': {                                         // scoops dirt with his tiny hands and throws it
+                    const N = anger ? 9 : 6, every = anger ? 15 : 22;
+                    if (boss.sub === 'scoop') {
+                        leanT = 1; thx = G.restX + 12 * S; thy = G.restY + 44 * S; jawT = 0.15;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) { boss.sub = 'throw'; boss.timer = every; dustCloud(G.shoulderX - 20 * S, G.gy - 4, 4, ['#e2d3b5', '#d8c3a0']); sound.playHit(); }
+                    } else if (boss.sub === 'throw') {
+                        leanT = 0.25; jawT = 0.25;
+                        boss.holding = boss.timer > every * 0.35;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            const hx = G.shoulderX - 22 * S, hy = G.shoulderY - 26 * S;
+                            const lob = boss.thrown % 3 === 2;              // every third one goes high and drops on you
+                            const T = lob ? 70 : 40, g = 0.3;
+                            const tx = bird.x + rand(-25, 25), ty = Math.min(bird.y, G.gy - 20);
+                            spawnClod(hx, hy, (tx - hx) / T * slow, ((ty - hy) / T - 0.5 * g * T) * slow);
+                            sound.playBoing();
+                            boss.thrown++; boss.timer = every;
+                            if (boss.thrown >= N) { boss.sub = 'done'; boss.timer = 30; boss.holding = false; }
+                        }
+                    } else {
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) { boss.state = 'HOVER'; boss.timer = 55 / ag; }
+                    }
+                    break;
+                }
+
+                case 'STOMP': {                                        // stomps: ground waves race across the floor
+                    const N = anger ? 4 : 3;
+                    if (boss.sub === 'wind') {
+                        bobT = -14 * S; thy = G.restY - 22 * S; jawT = 0.3;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.sub = 'stomp'; boss.timer = anger ? 24 : 32; boss.bobY = 8 * S;
+                            shakeScreen(); sound.playHit(); sound.playSplat();
+                            dustCloud(G.cx, G.gy - 4, 6, ['#e2d3b5', '#d8c3a0']);
+                            dinoWaves.push({ x: G.cx - 80 * S, vx: -(anger ? 7.2 : 5.8) * slow, h: 30 * S, age: 0 });
+                            if (anger) for (let k = 0; k < 2; k++) spawnClod(rand(40, W * 0.72), -30, 0, 0, 42 + k * 10);   // dirt shaken loose from the sky
+                            addPopup(G.cx - 60 * S, G.gy - 40, 'STOMP!', 4);
+                        }
+                    } else {
+                        thy = G.restY + 6 * S;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            if (++boss.stomps >= N) { boss.state = 'HOVER'; boss.timer = 60 / ag; }
+                            else { boss.sub = 'wind'; boss.timer = anger ? 14 : 20; }
+                        }
+                    }
+                    break;
+                }
+
+                case 'ROAR': {                                         // roar shockwave rings, then a sore throat
+                    if (boss.sub === 'inhale') {
+                        thx = G.restX + 28 * S; thy = G.restY - 30 * S; jawT = 0.35;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.sub = 'roar'; boss.timer = anger ? 70 : 52; boss.ringT = 0;
+                            sound.playWarning(); shakeScreen();
+                            addPopup(boss.hx - 40 * S, boss.hy - 70 * S, 'ROOOAR!', 9);
+                        }
+                    } else {
+                        jawT = 1; thx = G.restX - 6 * S + (Math.random() - 0.5) * 4 * S; thy = G.restY - 16 * S + (Math.random() - 0.5) * 4 * S;
+                        boss.ringT -= sf;
+                        if (boss.ringT <= 0) {
+                            const m = dinoMouth();
+                            dinoRings.push({ x: m.x, y: m.y, r: 18 * S, sp: 7.5 * slow, max: boss.roarMax, w: 13 * S });
+                            boss.ringT = anger ? 10 : 14;
+                        }
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.state = 'COUGH'; boss.timer = anger ? 270 : 220; boss.coughT = 20; boss.combo = 0;
+                            addPopup(boss.hx, boss.hy - 80 * S, 'SORE THROAT! BOUNCE ON HIS HEAD!', 4);
+                        }
+                    }
+                    break;
+                }
+
+                case 'COUGH': {                                        // vulnerable: head droops low, coughing
+                    thx = G.restX - 8 * S; thy = G.restY + 88 * S; jawT = 0.45 + boss.coughK * 0.4;
+                    if (bird.y + 12 >= G.gy - 20) boss.combo = 0;
+                    boss.coughT -= sf;
+                    if (boss.coughT <= 0) {
+                        boss.coughT = rand(26, 40); boss.coughK = 1;
+                        sound.playPoof();
+                        const m = dinoMouth();
+                        for (let k = 0; k < 3; k++) plantPuff(m.x - 6 * S, m.y, -rand(1, 2.4), rand(-0.8, 0.6), pick(['#e9edf3', '#d3d9e2']), 6 * S, 16 * S);
+                        addPopup(m.x - 30 * S, m.y - 10, '*cough*', 1);
+                    }
+                    dinoBump();
+                    boss.timer -= sf;
+                    if (boss.timer <= 0 && boss.state === 'COUGH') {
+                        boss.state = 'PHLEGM'; boss.timer = 30; boss.gooT = 14; boss.gooN = 0; boss.combo = 0;
+                    }
+                    break;
+                }
+
+                case 'PHLEGM': {                                       // clears his throat... and spits phlegm around at random
+                    const N = anger ? 8 : 5;
+                    thx = G.restX - 6 * S + Math.sin(boss.armT * 0.3) * 4 * S; thy = G.restY + 12 * S; jawT = 0.25;
+                    boss.gooT -= sf;
+                    if (boss.gooT <= 0 && boss.gooN < N) {
+                        const m = dinoMouth();
+                        boss.jaw = 0.95; boss.coughK = 0.6;
+                        dinoGoo.push({ x: m.x, y: m.y, vx: -rand(2.5, 8) * slow, vy: -rand(1, 6.5) * slow, r: rand(7, 11) * S, ph: rand(0, 6) });
+                        sound.playBoing();
+                        if (boss.gooN % 2 === 0) addPopup(m.x - 30 * S, m.y - 24, pick(['PTOOEY!', 'HWACK!', 'PTUI!']), 4);
+                        boss.gooN++; boss.gooT = rand(10, 20);
+                    }
+                    if (boss.gooN >= N) { boss.timer -= sf; if (boss.timer <= 0) { boss.state = 'HOVER'; boss.timer = 40 / ag; } }
+                    break;
+                }
+
+                case 'DYING': {                                        // coughing fit -> medicine -> pours a glass -> drinks -> chokes on it
+                    const d = boss.die;
+                    d.t += sf; d.pt += sf;
+                    const go = ph => { d.phase = ph; d.pt = 0; };
+                    const hf = boss._hf || { x: G.shoulderX - 20 * S, y: G.shoulderY }, hb = boss._hb || hf;
+                    if (d.phase === 'droop') go('coughfit');
+                    if (d.phase === 'coughfit') {
+                        thx = G.restX - 10 * S; thy = G.restY + 40 * S; jawT = 0.5 + boss.coughK * 0.4;
+                        if (Math.floor(d.pt) % 20 === 0) {
+                            boss.coughK = 1; sound.playPoof();
+                            const m = dinoMouth();
+                            for (let k = 0; k < 3; k++) plantPuff(m.x - 6 * S, m.y, -rand(1, 2.5), rand(-0.8, 0.6), pick(['#e9edf3', '#d3d9e2']), 6 * S, 16 * S);
+                            if (Math.floor(d.pt) % 40 === 0) addPopup(m.x - 30 * S, m.y - 20, '*COUGH* *COUGH*', 1);
+                        }
+                        if (d.pt > 100) { go('bottle'); addPopup(boss.hx, boss.hy - 70 * S, 'Medicine time...', 4); }
+                    } else if (d.phase === 'bottle') {                 // pulls out a purple bottle of throat syrup
+                        thx = G.restX + 4 * S; thy = G.restY + 26 * S; jawT = 0.1;
+                        d.prop = Math.min(1, d.pt / 12);
+                        if (d.pt > 34) go('pour');
+                    } else if (d.phase === 'pour') {                   // pours it into a glass
+                        thx = G.restX + 4 * S; thy = G.restY + 30 * S; jawT = 0.1;
+                        d.fill = Math.min(1, d.pt / 56);
+                        if (Math.floor(d.pt) % 9 === 0) sound.playDrip();
+                        if (d.pt > 66) go('drink');
+                    } else if (d.phase === 'drink') {                  // tiny arms can't reach: he bends his head down to the glass
+                        thx = hf.x + 92 * S; thy = hf.y - 6 * S; jawT = 0.35; headK = 0.16;
+                        if (d.pt > 14) d.fill = Math.max(0.35, d.fill - 0.02 * sf);
+                        if (Math.floor(d.pt) === 16) addPopup(hf.x, hf.y - 60 * S, '*glug glug*', 1);
+                        if (d.pt > 44) { go('choke'); sound.playWarning(); addPopup(boss.hx, boss.hy - 80 * S, '*COUGH!* *CHOKE!*', 9); shakeScreen(); }
+                    } else if (d.phase === 'choke') {                  // ...coughs mid-sip and chokes on it
+                        thx = G.restX + (Math.random() - 0.5) * 10 * S; thy = G.restY - 16 * S + (Math.random() - 0.5) * 8 * S;
+                        jawT = 0.6 + 0.35 * Math.sin(d.pt * 0.8); boss.coughK = 0.5 + 0.5 * Math.sin(d.pt * 0.9);
+                        if (Math.floor(d.pt) % 3 === 0) {
+                            const m = dinoMouth();
+                            particles.push({ x: m.x, y: m.y, vx: -rand(1, 4), vy: rand(-2.5, 1), color: pick(['#a78bfa', '#8b5cf6', '#c4b5fd']), radius: rand(1.6, 3), alpha: 1, life: 0.5 });
+                        }
+                        if (d.pt > 70) {
+                            go('sink'); shakeScreen(); sound.playHit();
+                            cartoonStars(boss.hx, boss.hy - 40 * S, 6, 4);
+                            d.drop = { gx: hf.x, gy: hf.y, gvy: -2, gr: 0, bx: hb.x, by: hb.y, bvy: -3, br: 0 };   // drops the glass and bottle
+                        }
+                    } else if (d.phase === 'sink') {
+                        thx = G.restX - 14 * S; thy = G.restY + 60 * S; jawT = 0.55;
+                        const k = d.drop;
+                        if (k) {
+                            k.gvy += 0.5 * sf; k.gy = Math.min(G.gy - 2, k.gy + k.gvy * sf); k.gr += k.gy < G.gy - 2 ? 0.12 * sf : 0;
+                            k.bvy += 0.5 * sf; k.by = Math.min(G.gy - 2, k.by + k.bvy * sf); k.br += k.by < G.gy - 2 ? -0.1 * sf : 0;
+                        }
+                        boss.rise = Math.max(0, 1 - d.pt / 110);
+                        if (Math.floor(d.pt) % 8 === 0) dustCloud(G.cx, G.gy - 4, 2, ['#e2d3b5', '#d8c3a0']);
+                        if (boss.rise <= 0) { go('done'); finishBossDeath(); }
+                    }
+                    break;
+                }
+
+                case 'DEFEATED':
+                    boss.rise = 0;
+                    if (--boss.timer <= 0) endBossFight();
+                    break;
+            }
+
+            // springs
+            boss.hx += (thx - boss.hx) * headK * sf;
+            boss.hy += (thy - boss.hy) * headK * sf;
+            boss.jaw += (jawT - boss.jaw) * 0.35 * sf;
+            boss.lean += (leanT - boss.lean) * 0.15 * sf;
+            boss.bobY += (bobT - boss.bobY) * 0.25 * sf;
+        }
+
+        function dinoCollisions() {
+            if (boss.state === 'COUGH' || boss.state === 'DYING' || boss.state === 'DEFEATED' || boss.state === 'WARNING') {
+                // even while he coughs, his leftover dirt and waves still count
+            } else {
+                const S = boss.dsc || 1, B = dinoBox();
+                if (bird.x + 11 > B.l + 6 && bird.x - 11 < B.r && bird.y + 10 > B.t + 10) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_SPIKE' }; }
+                if (Math.hypot(bird.x - (boss.hx - 10 * S), bird.y - (boss.hy - 6 * S)) < 44 * S + 9) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_LASER' }; }
+                if (boss.snapNow) {
+                    const tip = dinoTip();
+                    if (Math.hypot(bird.x - tip.x, bird.y - tip.y) < 40 * S) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_LASER' }; }
+                }
+            }
+            const gy = groundY();
+            for (const c of dinoClods) {
+                if (c.warn > 0) continue;
+                if (Math.hypot(bird.x - c.x, bird.y - c.y) < c.r + 10) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_SPIKE' }; }
+            }
+            for (const w of dinoWaves) {
+                if (Math.abs(bird.x - w.x) < 26 * (boss.dsc || 1) && bird.y > gy - w.h - 14) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_SPIKE' }; }
+            }
+            for (const g of dinoGoo) {
+                if (Math.hypot(bird.x - g.x, bird.y - g.y) < g.r + 10) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_SPIKE' }; }
+            }
+            for (const r of dinoRings) {
+                const dd = Math.hypot(bird.x - r.x, bird.y - r.y);
+                if (Math.abs(dd - r.r) < r.w / 2 + 9) { if (!absorbHit()) return { hit: true, cause: 'CRUSHER_SPIKE' }; }
+            }
+            return { hit: false };
+        }
+
+        // ---------- drawing ----------
+        function drawDinoArm(x, y, a1, a2, S, back) {
+            const L1 = 15 * S, L2 = 13 * S;
+            const ex = x - Math.cos(a1) * L1, ey = y + Math.sin(a1) * L1;
+            const hx = ex - Math.cos(a1 + a2) * L2, hy = ey + Math.sin(a1 + a2) * L2;
+            const seg = (x0, y0, x1, y1, w) => {
+                ctx.strokeStyle = INK; ctx.lineWidth = w + 4 * S; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+                ctx.strokeStyle = back ? DINO_COL.dark : DINO_COL.body; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+            };
+            ctx.lineCap = 'round';
+            seg(x, y, ex, ey, 9 * S); seg(ex, ey, hx, hy, 8 * S);
+            // two little claws
+            const ca = a1 + a2;
+            ctx.fillStyle = '#fff6e0'; ctx.strokeStyle = INK; ctx.lineWidth = 1.4 * S; ctx.lineJoin = 'round';
+            [-0.45, 0.45].forEach(o => {
+                const cxp = hx - Math.cos(ca + o) * 3 * S, cyp = hy + Math.sin(ca + o) * 3 * S;
+                const tx = hx - Math.cos(ca + o) * 9 * S, ty = hy + Math.sin(ca + o) * 9 * S;
+                ctx.beginPath(); ctx.moveTo(cxp - Math.sin(ca + o) * 2.4 * S, cyp - Math.cos(ca + o) * 2.4 * S); ctx.lineTo(tx, ty); ctx.lineTo(cxp + Math.sin(ca + o) * 2.4 * S, cyp + Math.cos(ca + o) * 2.4 * S); ctx.closePath(); ctx.fill(); ctx.stroke();
+            });
+            return { x: hx, y: hy };
+        }
+
+        function drawClod(c) {
+            ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+            const r = c.r, n = c.pts.length;
+            const path = () => { ctx.beginPath(); for (let k = 0; k < n; k++) { const a = k / n * 6.283, rr = r * c.pts[k]; k ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); };
+            // grass tufts poking out of the top
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            for (let k = 0; k < c.grass; k++) {
+                const gx = (k - (c.grass - 1) / 2) * r * 0.42;
+                ctx.fillStyle = '#5fc34a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.6;
+                ctx.beginPath(); ctx.moveTo(gx - 2.6, -r * 0.6); ctx.lineTo(gx + (k % 2 ? 2 : -2), -r * 1.35); ctx.lineTo(gx + 2.6, -r * 0.6); ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+            path(); ctx.fillStyle = '#8b5a2b'; ctx.fill();
+            ctx.save(); path(); ctx.clip();
+            ctx.fillStyle = '#6b4220'; ctx.beginPath(); ctx.arc(r * 0.35, r * 0.4, r * 0.95, 0, 6.283); ctx.fill();
+            ctx.fillStyle = '#5fc34a'; ctx.fillRect(-r * 1.2, -r * 1.2, r * 2.4, r * 0.55);      // grassy top layer
+            ctx.restore();
+            path(); ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.stroke();
+            ctx.fillStyle = '#b07a45';
+            [[-0.3, 0.1, 0.16], [0.25, -0.05, 0.12], [-0.05, 0.42, 0.11]].forEach(([px, py, pr]) => { ctx.beginPath(); ctx.arc(px * r, py * r, pr * r, 0, 6.283); ctx.fill(); });
+            ctx.restore();
+        }
+
+        function drawDinoHead(S) {
+            const st = boss.state, D = boss.die;
+            const dead = (st === 'DYING' && D && D.phase === 'sink') || st === 'DEFEATED';
+            const choking = st === 'DYING' && D && D.phase === 'choke';
+            const coughing = st === 'COUGH' || (st === 'DYING' && D && D.phase === 'coughfit');
+            const jaw = clamp(boss.jaw, 0, 1.1);
+            const skin = choking ? '#8f8ad9' : boss.flash > 0 ? '#bdf0a8' : DINO_COL.body;
+            ctx.save();
+            ctx.translate(boss.hx, boss.hy);
+            const sq = boss.squish || 0;
+            ctx.scale(S * (1 + sq * 0.12), S * (1 - sq * 0.14));
+            ctx.rotate((boss.coughK || 0) * 0.12 - (st === 'ROAR' && boss.sub === 'roar' ? 0.08 : 0));
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            const ja = -jaw * 0.62, hingeX = 38, hingeY = 8;
+            const rotP = (px, py) => [hingeX + px * Math.cos(ja) - py * Math.sin(ja), hingeY + px * Math.sin(ja) + py * Math.cos(ja)];
+            // mouth interior
+            if (jaw > 0.05) {
+                const tip = rotP(-100, 2);
+                ctx.fillStyle = '#5a1220';
+                ctx.beginPath(); ctx.moveTo(hingeX, hingeY); ctx.lineTo(-76, 10); ctx.lineTo(tip[0], tip[1]); ctx.closePath(); ctx.fill();
+                const tg = rotP(-48, 0);
+                ctx.fillStyle = '#e86a8a';
+                ctx.beginPath(); ctx.ellipse(tg[0] / 2 - 10, (tg[1] + 10) / 2 + 2, 22, 7 + jaw * 4, ja * 0.5, 0, 6.283); ctx.fill();
+            }
+            // lower jaw
+            ctx.save(); ctx.translate(hingeX, hingeY); ctx.rotate(ja);
+            const lowJaw = new Path2D();
+            lowJaw.moveTo(0, -4); lowJaw.lineTo(-100, 2); lowJaw.quadraticCurveTo(-112, 6, -104, 18); lowJaw.lineTo(-10, 26); lowJaw.quadraticCurveTo(8, 18, 0, -4); lowJaw.closePath();
+            ctx.fillStyle = skin; ctx.fill(lowJaw);
+            ctx.save(); ctx.clip(lowJaw);
+            ctx.fillStyle = DINO_COL.belly; ctx.beginPath(); ctx.moveTo(-110, 12); ctx.quadraticCurveTo(-50, 24, 10, 20); ctx.lineTo(10, 40); ctx.lineTo(-110, 40); ctx.closePath(); ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(lowJaw);
+            ctx.fillStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            for (let x = -94; x <= -22; x += 13) { ctx.beginPath(); ctx.moveTo(x, 2); ctx.lineTo(x + 5, -7); ctx.lineTo(x + 10, 2); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+            ctx.restore();
+            // skull (path kept so the outline goes around the skull, not around the last spot drawn)
+            const skull = new Path2D();
+            skull.moveTo(60, 8); skull.bezierCurveTo(68, -30, 32, -54, -5, -52); skull.bezierCurveTo(-46, -50, -80, -36, -88, -14);
+            skull.quadraticCurveTo(-92, 4, -78, 10); skull.lineTo(38, 12); skull.quadraticCurveTo(58, 15, 60, 8); skull.closePath();
+            ctx.fillStyle = skin; ctx.fill(skull);
+            ctx.save(); ctx.clip(skull);
+            ctx.fillStyle = choking ? '#7a74c4' : DINO_COL.spot;
+            [[34, -30, 6], [48, -12, 4.5], [-34, -34, 4]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill(); });
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.ellipse(-36, -40, 26, 6, -0.18, 0, 6.283); ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(skull);
+            // upper teeth
+            ctx.fillStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            for (let x = -76; x <= 22; x += 12) { ctx.beginPath(); ctx.moveTo(x, 9); ctx.lineTo(x + 5, 18); ctx.lineTo(x + 10, 9); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+            // nostrils
+            ctx.fillStyle = INK;
+            ctx.beginPath(); ctx.ellipse(-80, -18, 3.2, 2, -0.3, 0, 6.283); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(-68, -23, 2.6, 1.7, -0.3, 0, 6.283); ctx.fill();
+            // eye
+            const ex = 10, ey = -24, er = choking ? 17 : 13;
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.ellipse(ex, ey, er, er - 1, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+            if (dead) {
+                ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(ex - 6, ey - 6); ctx.lineTo(ex + 6, ey + 6); ctx.moveTo(ex + 6, ey - 6); ctx.lineTo(ex - 6, ey + 6); ctx.stroke();
+            } else if (choking) {                                   // eyes bulging, tiny pupil
+                ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(ex - 2 + Math.sin(boss.armT) * 1.5, ey, 3, 0, 6.283); ctx.fill();
+            } else {
+                const px = ex - 3, py = ey + (boss.look || 0) * 4;
+                ctx.fillStyle = dinoAnger() ? '#e8463c' : '#f5c242';
+                ctx.beginPath(); ctx.arc(px, py, 6.5, 0, 6.283); ctx.fill();
+                ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(px, py, 2.2, 5, 0, 0, 6.283); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px - 2, py - 3, 1.6, 0, 6.283); ctx.fill();
+                if (coughing) {                                     // watery, half-closed eye
+                    ctx.fillStyle = skin; ctx.beginPath(); ctx.ellipse(ex, ey - 3, 14, 10, 0, Math.PI, 0); ctx.fill();
+                    ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(ex - 13, ey - 3); ctx.lineTo(ex + 13, ey - 3); ctx.stroke();
+                    ctx.fillStyle = '#7cc8f5'; ctx.lineWidth = 1.4;
+                    ctx.beginPath(); ctx.moveTo(ex - 8, ey + 10); ctx.quadraticCurveTo(ex - 12, ey + 18, ex - 8, ey + 20); ctx.quadraticCurveTo(ex - 4, ey + 18, ex - 8, ey + 10); ctx.fill(); ctx.stroke();
+                }
+            }
+            // brow ridge: a chunky wedge over the eye, angrier when enraged
+            if (!choking) {
+                const drop = coughing ? -2 : dinoAnger() ? 5 : 2;
+                ctx.fillStyle = choking ? '#6f69b8' : DINO_COL.dark; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+                ctx.beginPath();
+                ctx.moveTo(-8, -34 + drop); ctx.quadraticCurveTo(10, -46, 28, -42 - drop * 0.3);
+                ctx.lineTo(28, -35 - drop * 0.3); ctx.quadraticCurveTo(10, -38, -6, -29 + drop); ctx.closePath();
+                ctx.fill(); ctx.stroke();
+            }
+            // tongue hanging out while coughing
+            if ((coughing || choking) && jaw > 0.2) {
+                const tp = rotP(-70, 8);
+                ctx.fillStyle = '#e86a8a'; ctx.strokeStyle = INK; ctx.lineWidth = 2.2;
+                ctx.beginPath(); ctx.ellipse(tp[0], tp[1] + 10, 7, 12, 0.3, 0, 6.283); ctx.fill(); ctx.stroke();
+                ctx.strokeStyle = 'rgba(27,36,51,0.4)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(tp[0], tp[1] + 2); ctx.lineTo(tp[0] + 2, tp[1] + 16); ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // throat syrup bottle (purple, with a label) and a glass
+        function drawSyrupBottle(x, y, rot, S) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(S * 1.7, S * 1.7);
+            ctx.lineJoin = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+            ctx.fillStyle = '#8b5cf6'; ctx.beginPath(); ctx.roundRect(-8, -26, 16, 26, 5); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#6d3fd6'; ctx.fillRect(3, -24, 4, 22);
+            ctx.fillStyle = '#8b5cf6'; ctx.beginPath(); ctx.rect(-3.5, -33, 7, 7); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#e5e7eb'; ctx.beginPath(); ctx.roundRect(-4.5, -38, 9, 5, 1.5); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(-6.5, -20, 13, 12, 2); ctx.fill(); ctx.lineWidth = 1.2; ctx.stroke();
+            ctx.fillStyle = '#e8463c'; ctx.fillRect(-1.2, -18.5, 2.4, 7); ctx.fillRect(-3.5, -16.2, 7, 2.4);     // little red cross on the label
+            ctx.fillStyle = 'rgba(27,36,51,0.5)'; ctx.fillRect(-5, -10.5, 10, 1);
+            ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(-6, -24, 2, 18);
+            ctx.restore();
+        }
+        function drawGlass(x, y, rot, fill, S) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(S * 1.6, S * 1.6);
+            ctx.lineJoin = 'round';
+            const cup = () => { ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(7, 0); ctx.lineTo(9.5, -22); ctx.lineTo(-9.5, -22); ctx.closePath(); };
+            if (fill > 0.01) {
+                ctx.save(); cup(); ctx.clip();
+                const h = 21 * fill;
+                ctx.fillStyle = '#a78bfa'; ctx.fillRect(-12, -h, 24, h + 1);
+                ctx.fillStyle = '#c4b5fd'; ctx.fillRect(-12, -h, 24, 2);
+                ctx.restore();
+            }
+            cup(); ctx.fillStyle = 'rgba(210,235,255,0.35)'; ctx.fill();
+            ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-5.5, -3); ctx.lineTo(-7, -19); ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawDino() {
+            if ((boss.rise === undefined ? 1 : boss.rise) <= 0.001) return;
+            const G = dinoGeo(), S = G.S, t = boss.armT || 0, D = boss.die;
+            const ln = (boss.lean || 0) * 20 * S, by = boss.bobY || 0;
+            ctx.save();
+            ctx.beginPath(); ctx.rect(-200, -600, (G.cx + 600), G.gy + 2 + 600); ctx.clip();    // the rest of him is underground
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            const tL = G.top + by, cx = G.cx;
+            // back plates: sit on the torso's back curve, standing out along its normal, smaller toward the tail
+            {
+                const P0 = [cx - 36 * S - ln, tL - 2 * S], P1 = [cx + 18 * S - ln * 0.5, tL - 16 * S], P2 = [cx + 82 * S, tL + 34 * S], P3 = [cx + 92 * S, G.gy + 12];
+                const B = (t, i) => (1 - t) ** 3 * P0[i] + 3 * (1 - t) ** 2 * t * P1[i] + 3 * (1 - t) * t * t * P2[i] + t ** 3 * P3[i];
+                ctx.fillStyle = DINO_COL.spike; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+                for (let k = 0; k < 6; k++) {
+                    const t = 0.1 + k * 0.105;
+                    const x = B(t, 0), y = B(t, 1);
+                    let tx = B(t + 0.01, 0) - B(t - 0.01, 0), ty = B(t + 0.01, 1) - B(t - 0.01, 1);
+                    const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+                    const nx = ty, ny = -tx;                              // outward normal of the back
+                    const h = (20 - k * 2.2) * S, w = (10 - k * 0.8) * S;
+                    ctx.beginPath();
+                    ctx.moveTo(x - tx * w - nx * 3 * S, y - ty * w - ny * 3 * S);
+                    ctx.lineTo(x + nx * h + tx * 2 * S, y + ny * h + ty * 2 * S);
+                    ctx.lineTo(x + tx * w - nx * 3 * S, y + ty * w - ny * 3 * S);
+                    ctx.closePath(); ctx.fill(); ctx.stroke();
+                }
+            }
+            // arm poses
+            const toss = boss.state === 'TOSS' && boss.sub === 'throw', scoop = (boss.lean || 0) > 0.5;
+            const ph = boss.state === 'DYING' && D ? D.phase : '';
+            let a1 = 0.55 + Math.sin(t * 0.3) * 0.45, a2 = -0.7 + Math.sin(t * 0.37) * 0.5, b1 = a1 + 0.25, b2 = a2;
+            if (scoop) { a1 = 1.35; a2 = 0.2; b1 = 1.5; b2 = 0.2; }
+            if (toss) { a1 = boss.holding ? -1.1 : 0.2; a2 = boss.holding ? -0.4 : 0.1; b1 = a1 + 0.3; b2 = a2; }
+            if (boss.state === 'COUGH' || ph === 'coughfit') { a1 = 1.1 + Math.sin(t * 0.5) * 0.15; a2 = -1.2; b1 = a1 + 0.2; b2 = a2; }
+            if (ph === 'bottle' || ph === 'pour' || ph === 'drink' || ph === 'choke') {
+                a1 = 0.7; a2 = -0.2;                                  // front hand holds the glass out
+                b1 = ph === 'pour' ? -0.5 : 0.25; b2 = ph === 'pour' ? -1.0 : -0.55;   // back hand tips the bottle over it
+                if (ph === 'choke') { a1 += Math.sin(t * 0.9) * 0.2; b1 += Math.sin(t * 0.8) * 0.2; }
+            }
+            if (ph === 'sink' || boss.state === 'DEFEATED') { a1 = 1.3 + Math.sin(t * 0.2) * 0.1; a2 = 0.3; b1 = 1.45; b2 = 0.3; }
+            const backHand = drawDinoArm(G.shoulderX - ln + 12 * S, G.shoulderY + by + 6 * S, b1, b2, S, true);
+            // torso (kept as a path so the outline traces the body)
+            const torso = new Path2D();
+            torso.moveTo(cx - 76 * S, G.gy + 12);
+            torso.bezierCurveTo(cx - 98 * S, tL + 92 * S, cx - 78 * S - ln, tL + 14 * S, cx - 36 * S - ln, tL - 2 * S);
+            torso.bezierCurveTo(cx + 18 * S - ln * 0.5, tL - 16 * S, cx + 82 * S, tL + 34 * S, cx + 92 * S, G.gy + 12);
+            torso.closePath();
+            ctx.fillStyle = DINO_COL.body; ctx.fill(torso);
+            ctx.save(); ctx.clip(torso);
+            ctx.fillStyle = DINO_COL.belly; ctx.beginPath(); ctx.ellipse(cx - 54 * S - ln * 0.7, tL + 104 * S, 30 * S, 82 * S, -0.12, 0, 6.283); ctx.fill();
+            ctx.strokeStyle = 'rgba(63,143,52,0.45)'; ctx.lineWidth = 2;
+            for (let k = 0; k < 5; k++) { const yy = tL + 54 * S + k * 19 * S; ctx.beginPath(); ctx.moveTo(cx - 80 * S - ln * 0.6, yy); ctx.quadraticCurveTo(cx - 54 * S - ln * 0.6, yy + 5 * S, cx - 26 * S - ln * 0.6, yy); ctx.stroke(); }
+            ctx.fillStyle = DINO_COL.spot;
+            [[24, 40, 9], [50, 72, 7], [14, 96, 6], [62, 112, 8]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(cx + x * S - ln * 0.3, tL + y * S, r * S, 0, 6.283); ctx.fill(); });
+            ctx.restore();
+            ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(torso);
+            // short, thick neck
+            const nx = G.neckX - ln, ny = G.neckY + by, hbx = boss.hx + 40 * S, hby = boss.hy + 10 * S;
+            const neck = (w, col, dx, dy) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(nx + dx, ny + dy); ctx.quadraticCurveTo((nx + hbx) / 2 + 10 * S + dx, (ny + hby) / 2 + dy, hbx + dx, hby + dy); ctx.stroke(); };
+            neck(66 * S, INK, 0, 0); neck(59 * S, DINO_COL.body, 0, 0); neck(16 * S, DINO_COL.belly, -18 * S, 4 * S);
+            // front arm
+            const hand = drawDinoArm(G.shoulderX - ln, G.shoulderY + by, a1, a2, S, false);
+            boss._hf = hand; boss._hb = backHand;
+            if (toss && boss.holding) drawClod({ x: hand.x - 4 * S, y: hand.y - 6 * S, r: 10 * S, rot: t * 0.1, pts: [1, 0.9, 1.05, 0.95, 1, 1.08, 0.92, 1, 0.96, 1.04], grass: 2 });
+            // medicine props during the death scene
+            if (D && (ph === 'bottle' || ph === 'pour' || ph === 'drink' || ph === 'choke')) {
+                const k = D.prop || 0;
+                drawGlass(hand.x - 2 * S, hand.y + 3 * S, 0, D.fill || 0, S * k);
+                const bRot = ph === 'pour' ? -2.1 : -0.15;
+                drawSyrupBottle(backHand.x + 2 * S, backHand.y + 4 * S, bRot, S * k);
+                if (ph === 'pour') {                                    // purple stream into the glass
+                    const mx = backHand.x + 2 * S + Math.sin(bRot) * 38 * S * 1.7, my = backHand.y + 4 * S - Math.cos(bRot) * 38 * S * 1.7;
+                    ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 3.4 * S; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(mx, my); ctx.quadraticCurveTo(mx - 4 * S, (my + hand.y - 30 * S) / 2, hand.x - 2 * S, hand.y - 28 * S); ctx.stroke();
+                }
+            }
+            // head
+            drawDinoHead(S);
+            ctx.restore();
+            // dropped glass and bottle
+            if (D && D.drop) {
+                drawGlass(D.drop.gx, D.drop.gy, D.drop.gr, 0.2, S);
+                drawSyrupBottle(D.drop.bx, D.drop.by, D.drop.br, S);
+            }
+            if (boss.state === 'COUGH' || ph === 'sink' || ph === 'coughfit') {     // dazed stars
+                for (let s2 = 0; s2 < 3; s2++) {
+                    const a = (boss.armT || 0) * 0.08 + s2 * 2.094;
+                    bossStar(boss.hx + Math.cos(a) * 36 * S, boss.hy - 62 * S + Math.sin(a) * 7 * S, 7 * S, (boss.armT || 0) * 0.12);
+                }
+            }
+        }
+
+        function drawDinoStuff() {
+            if (boss.kind !== 'dino') return;
+            const gy = groundY(), S = boss.dsc || 1, t = state.frameCount;
+            // slime puddles left by phlegm, fading away
+            for (const sl of dinoSlime) {
+                const a = Math.min(1, sl.life / 50);
+                ctx.save(); ctx.globalAlpha = a * 0.95;
+                ctx.fillStyle = '#7cc947'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.ellipse(sl.x, gy + 1, sl.r, sl.r * 0.28, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#b5f07a'; ctx.beginPath(); ctx.ellipse(sl.x - sl.r * 0.25, gy - 0.5, sl.r * 0.35, sl.r * 0.08, 0, 0, 6.283); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                for (let k = 0; k < 3; k++) { const bx = sl.x + Math.sin(sl.seed + k * 2.1) * sl.r * 0.6, rr = 1.5 + (k % 2); ctx.beginPath(); ctx.arc(bx, gy - 1 - Math.abs(Math.sin(t * 0.08 + k)) * 2, rr, 0, 6.283); ctx.fill(); }
+                ctx.restore();
+            }
+            // flying phlegm blobs
+            for (const g of dinoGoo) {
+                const wob = 1 + Math.sin(g.ph) * 0.12;
+                ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.atan2(g.vy, g.vx));
+                ctx.fillStyle = '#9be15d'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.lineJoin = 'round';
+                ctx.beginPath(); ctx.ellipse(0, 0, g.r * 1.15 * wob, g.r * 0.85 / wob, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-g.r * 0.9, -g.r * 0.35); ctx.quadraticCurveTo(-g.r * 2.1, 0, -g.r * 0.9, g.r * 0.35); ctx.fill(); ctx.stroke();   // goopy tail
+                ctx.fillStyle = '#d4fa9e'; ctx.beginPath(); ctx.ellipse(g.r * 0.25, -g.r * 0.3, g.r * 0.35, g.r * 0.18, 0.3, 0, 6.283); ctx.fill();
+                ctx.restore();
+            }
+            // bite target crosshairs
+            for (const m of dinoMarks) {
+                const k = m.life / m.max, rr = 16 + 10 * k;
+                ctx.save(); ctx.globalAlpha = Math.min(1, k * 2);
+                ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(m.x, m.y, rr, 0, 6.283); ctx.stroke();
+                ctx.strokeStyle = '#e8463c'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(m.x, m.y, rr, 0, 6.283); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(m.x - rr - 6, m.y); ctx.lineTo(m.x - rr + 6, m.y); ctx.moveTo(m.x + rr - 6, m.y); ctx.lineTo(m.x + rr + 6, m.y);
+                ctx.moveTo(m.x, m.y - rr - 6); ctx.lineTo(m.x, m.y - rr + 6); ctx.moveTo(m.x, m.y + rr - 6); ctx.lineTo(m.x, m.y + rr + 6); ctx.stroke();
+                ctx.restore();
+            }
+            // roar danger zone while he inhales
+            if (boss.state === 'ROAR' && boss.sub === 'inhale') {
+                const m = dinoMouth(), p = 0.5 + 0.5 * Math.sin(t * 0.4);
+                ctx.save(); ctx.setLineDash([12, 10]);
+                ctx.strokeStyle = `rgba(232,70,60,${0.45 + p * 0.4})`; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.arc(m.x, m.y, boss.roarMax, 0, 6.283); ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = `rgba(232,70,60,${0.06 + p * 0.05})`; ctx.beginPath(); ctx.arc(m.x, m.y, boss.roarMax, 0, 6.283); ctx.fill();
+            }
+            // roar shockwave rings
+            for (const r of dinoRings) {
+                const a = 1 - r.r / r.max;
+                ctx.save(); ctx.globalAlpha = Math.max(0.15, a);
+                ctx.strokeStyle = INK; ctx.lineWidth = r.w + 6; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.283); ctx.stroke();
+                ctx.strokeStyle = '#fff6c2'; ctx.lineWidth = r.w; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 6.283); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(r.x, r.y, r.r - r.w * 0.25, 0, 6.283); ctx.stroke();
+                ctx.restore();
+            }
+            // ground waves: a racing hump of dirt with grass on top
+            for (const w of dinoWaves) {
+                const x = w.x, h = w.h, hw = 34 * S;
+                ctx.save(); ctx.lineJoin = 'round';
+                ctx.beginPath(); ctx.moveTo(x - hw, gy + 2); ctx.quadraticCurveTo(x, gy - h * 2, x + hw, gy + 2); ctx.closePath();
+                ctx.fillStyle = '#8b5a2b'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+                ctx.strokeStyle = '#5fc34a'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(x - hw * 0.7, gy - h * 0.55); ctx.quadraticCurveTo(x, gy - h * 1.62, x + hw * 0.7, gy - h * 0.55); ctx.stroke();
+                ctx.fillStyle = '#6b4220';
+                [[-0.3, 0.3], [0.2, 0.45], [0, 0.15]].forEach(([px, py]) => { ctx.beginPath(); ctx.arc(x + px * hw, gy - h * py, 2.4, 0, 6.283); ctx.fill(); });
+                ctx.restore();
+            }
+            // dirt clods (plus landing markers for the ones about to fall from the sky)
+            for (const c of dinoClods) {
+                if (c.warn > 0) {
+                    const f = Math.floor(c.warn / 4) % 2 === 0;
+                    ctx.fillStyle = f ? 'rgba(232,70,60,0.45)' : 'rgba(255,210,63,0.45)';
+                    ctx.beginPath(); ctx.ellipse(c.x, gy + 2, c.r * 1.8, 6, 0, 0, 6.283); ctx.fill();
+                    ctx.fillStyle = f ? '#ff6b6b' : '#ffd23f'; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+                    ctx.beginPath(); ctx.moveTo(c.x, 40); ctx.lineTo(c.x + 11, 18); ctx.lineTo(c.x - 11, 18); ctx.closePath(); ctx.fill(); ctx.stroke();
+                    continue;
+                }
+                drawClod(c);
+            }
+        }
+
         function checkBossCollisions(box) {
-            if (!boss.active || boss.state === 'DEFEATED' || boss.state === 'WARNING') return { hit: false };
+            if (boss.active && boss.kind === 'dino') return dinoCollisions();
+            if (!boss.active || boss.state === 'DEFEATED' || boss.state === 'DYING' || boss.state === 'WARNING') return { hit: false };
             const bird_r = 11;
 
             if (boss.state !== 'STUNNED' && !boss.fg) {
@@ -5418,8 +6521,16 @@
         }
 
         function drawBoss() {
-            if (!boss.active || boss.state === 'DEFEATED' || boss.state === 'WARNING' || boss.state === 'HIDDEN') return;
-            if (boss.kind === 'glove') { if (!boss.fg) drawMittBody(); return; }
+            if (!boss.active || boss.state === 'WARNING' || boss.state === 'HIDDEN') return;
+            if (boss.kind === 'glove') {
+                if (boss.die) drawMittDying();
+                else if (boss.state !== 'DEFEATED' && !boss.fg) drawMittBody();
+                return;
+            }
+            if (boss.kind === 'dino') { drawDino(); return; }
+            if (boss.state === 'DEFEATED') return;
+            const D = boss.state === 'DYING' ? boss.die : null;
+            if (D && D.gone) return;
             const W = boss.w, H = boss.h, gy = groundY();
             let bx = boss.x, by = boss.y;
             if (boss.shake > 0) { bx += (Math.random() - 0.5) * 6; by += (Math.random() - 0.5) * 4; }
@@ -5432,7 +6543,7 @@
             ctx.save();
             ctx.translate(bx, by);
             ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-            const stunned = boss.state === 'STUNNED';
+            const stunned = boss.state === 'STUNNED' || !!D;
             const ang = boss.hp / boss.maxHp < 0.4;
             const P = boss.phase2 ? { base: '#9a6f78', lit: '#c99aa0', dark: '#744550', face: '#4a2f3c' } : { base: '#7d889b', lit: '#a4aec0', dark: '#5b6578', face: '#3d4658' };
 
@@ -5447,7 +6558,7 @@
                 ctx.beginPath(); ctx.moveTo(sx + 5, H + 8); ctx.lineTo(sx + 9, H + 18); ctx.lineTo(sx + 13, H + 8); ctx.closePath(); ctx.fill();
             }
             // horns on top
-            [[10, 22, 16], [W / 2 - 11, 34, 22], [W - 32, 22, 16]].forEach(([sx, hgt, ww]) => {
+            (D && D.hornsOff ? [] : [[10, 22, 16], [W / 2 - 11, 34, 22], [W - 32, 22, 16]]).forEach(([sx, hgt, ww]) => {
                 ctx.fillStyle = '#e9dfc4'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
                 ctx.beginPath(); ctx.moveTo(sx, 8); ctx.lineTo(sx + ww / 2, -hgt); ctx.lineTo(sx + ww, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
                 ctx.fillStyle = '#c9bd9c';
@@ -5515,6 +6626,16 @@
                 ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 1.4;
                 ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
             }
+            if (D && D.n) {                                   // death cracks spreading, glowing from inside
+                const glow = 0.6 + 0.4 * Math.sin(state.frameCount * 0.6);
+                for (let c = 0; c < D.n; c++) {
+                    const pts = D.cracks[c];
+                    ctx.strokeStyle = INK; ctx.lineWidth = 4;
+                    ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+                    ctx.strokeStyle = `rgba(255,210,63,${glow})`; ctx.lineWidth = 1.8;
+                    ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+                }
+            }
             if (boss.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${boss.flash / 10 * 0.7})`; ctx.fillRect(0, 0, W, H); }
             ctx.restore();
 
@@ -5537,6 +6658,7 @@
 
         function drawBossLasersAndSpikes() {
             if (!boss.active) return;
+            drawDinoStuff();
             const gy = groundY();
 
             for (const F of bossFalling) {
@@ -5625,13 +6747,13 @@
                 outlinedText('BOSS DOWN!', 0, 0, 44, '#7ee06a', 11);
                 outlinedText('+5', 0, 44, 30, '#ffd23f', 8);
                 ctx.restore();
-            } else if (boss.state !== 'HIDDEN') {
+            } else if (boss.state !== 'HIDDEN' && boss.state !== 'DYING') {
                 const bw = Math.min(250, W * 0.62), bh = 18, x = cx - bw / 2, y = 96;
                 if (boss.enrage > 0) {
                     const k = Math.min(1, (100 - boss.enrage) / 10), sc = 0.7 + 0.3 * k + Math.sin(boss.enrage * 0.5) * 0.03;
                     ctx.save(); ctx.translate(cx, state.height * 0.3); ctx.scale(sc, sc);
                     outlinedText('ENRAGED!', 0, 0, 42, '#ff6b6b', 10);
-                    outlinedText(boss.kind === 'glove' ? 'double slams & rock rain' : 'rocks incoming', 0, 38, 20, '#fff', 5);
+                    outlinedText(boss.kind === 'glove' ? 'double slams & rock rain' : boss.kind === 'dino' ? 'frenzy bites & dirt rain' : 'rocks incoming', 0, 38, 20, '#fff', 5);
                     ctx.restore();
                 }
                 outlinedText(boss.name, cx, y - 12, 15, boss.phase2 ? '#ff9a9a' : '#fff', 4.5);
@@ -6148,6 +7270,7 @@
             drawMittForeground();
             drawBossHud();
             drawPopups();
+            drawFourthWall();
 
             drawPauseOverlay();
             if (state.flashEffectTimer > 0) {
@@ -6713,7 +7836,8 @@
             { id: 'snack_run',   icon: '🥫', name: 'Side Quest Unlocked',         hint: 'Fly far enough and somebody important notices you.',           desc: 'Reach a boss during a normal run.' },
             { id: 'beat_crusher',icon: '🪨', name: 'Skill Issue (Theirs)',        hint: 'The wall that has been on shift for 300 years finally clocks out.', desc: 'Defeat Big Mr. Crusher.' },
             { id: 'beat_mitt',   icon: '🧤', name: 'Talk to the Hand',            hint: "Put the builder's glove back in the drawer.",                  desc: 'Defeat Mr. Mitt.' },
-            { id: 'beat_both',   icon: '🏆', name: "It's Over, Plukbering",       hint: 'Both enforcers, both retired.',                                desc: 'Defeat both bosses.' },
+            { id: 'beat_dino',   icon: '🦖', name: 'The Meteor Was Late',         hint: "Do what the asteroid couldn't.",                               desc: 'Defeat Mr. Chompsalot.' },
+            { id: 'beat_both',   icon: '🏆', name: "It's Over, Plukbering",       hint: 'Every enforcer, retired.',                                     desc: 'Defeat all three bosses.' },
             { id: 'combo5',      icon: '💥', name: 'Five Head',                   hint: "When the giant is seeing stars, dance on him. Don't touch the floor.", desc: 'Land a x5 combo on a dizzy boss.' },
             { id: 'night',       icon: '🌙', name: '3 AM Challenge',              hint: 'Stay out way past your bedtime.',                              desc: 'Keep flying until nightfall.' },
             { id: 'powerups',    icon: '⚡', name: 'Stonks',                      hint: 'Hoard ten shiny things.',                                      desc: 'Collect 10 power-ups.',            stat: 'powerups', goal: 10 },
@@ -6837,7 +7961,7 @@
             const t = performance.now() / 16.67;
             try {
                 ctx = g;
-                Object.assign(boss, { active: true, state: 'HOVER', sub: '', flash: 0, shake: 0, hp: 100, maxHp: 100, phase2: false, enrage: 0, beamActive: false, beamCharge: 0, fg: false, stun: 0 });
+                Object.assign(boss, { active: true, state: 'HOVER', sub: '', flash: 0, shake: 0, hp: 100, maxHp: 100, phase2: false, enrage: 0, beamActive: false, beamCharge: 0, fg: false, stun: 0, die: null });
                 if (kind === 'glove') {
                     const sc = 0.84;
                     g.setTransform(dp * sc, 0, 0, dp * sc, 0, 0);
@@ -6848,6 +7972,15 @@
                     boss.sq = Math.sin(t * 0.08) * 0.035;
                     boss.x = (W / dp / sc - MITT_W) / 2;
                     boss.y = 22 + Math.sin(t * 0.06) * 5;
+                } else if (kind === 'dino') {
+                    g.setTransform(dp, 0, 0, dp, 0, 0);
+                    const LW = W / dp, LH = H / dp;
+                    Object.assign(boss, { kind: 'dino', dsc: 0.5, dgy: LH + 44, dbx: LW * 0.74, rise: 1, lean: 0, bobY: 0, squish: 0, coughK: 0, armT: t, holding: false, sub: '' });
+                    const G = dinoGeo();
+                    boss.hx = G.restX + Math.sin(t * 0.04) * 3;
+                    boss.hy = G.restY + Math.sin(t * 0.06) * 3;
+                    boss.jaw = 0.1 + 0.8 * Math.pow(Math.max(0, Math.sin(t * 0.045)), 6);     // the odd chomp at the air
+                    boss.look = Math.sin(t * 0.03) * 0.6;
                 } else {
                     const sc = 0.66;
                     g.setTransform(dp * sc, 0, 0, dp * sc, 0, 0);
