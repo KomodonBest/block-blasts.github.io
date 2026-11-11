@@ -240,6 +240,10 @@
             transition: opacity .25s ease, transform .25s cubic-bezier(.2,.9,.3,1.3);
         }
         .move-btn svg { width: 38px; height: 38px; pointer-events: none; }
+        .move-btn::before { content: ''; position: absolute; top: -16px; bottom: -14px; left: -14px; right: -14px; border-radius: 26px; }
+        #move-left-btn::before { right: -9px; }
+        #move-right-btn::before { left: -9px; }
+        .move-btn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; outline: none; }
         .move-btn.pressed { transform: translateY(6px) scale(1); box-shadow: 0 0 0 var(--ink); background: #ffb627; }
         /* the pair sits together in the bottom-left corner: one thumb steers, the other taps to flap */
         #move-left-btn { left: 14px; }
@@ -369,6 +373,24 @@
                     <button id="toggle-shake-btn" class="btn green small" style="width:auto;min-width:62px;padding:3px 8px;font-size:12px;">ON</button>
                 </div>
 
+                <!-- Weather Toggle -->
+                <div style="width:100%;display:flex;justify-content:space-between;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:14px;padding:6px 10px;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:700;color:var(--ink);">Weather Events</div>
+                        <div style="font-size:10px;color:#5b6578;">Rain, storms, wind, fog, snow</div>
+                    </div>
+                    <button id="toggle-weather-btn" class="btn green small" style="width:auto;min-width:62px;padding:3px 8px;font-size:12px;">ON</button>
+                </div>
+
+                <!-- Performance Mode Toggle -->
+                <div style="width:100%;display:flex;justify-content:space-between;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:14px;padding:6px 10px;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:700;color:var(--ink);">Performance Mode</div>
+                        <div style="font-size:10px;color:#5b6578;">Lower resolution, fewer particles</div>
+                    </div>
+                    <button id="toggle-perf-btn" class="btn green small" style="width:auto;min-width:62px;padding:3px 8px;font-size:12px;">OFF</button>
+                </div>
+
                 <!-- Sound Effects Toggle -->
                 <div style="width:100%;display:flex;justify-content:space-between;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:14px;padding:6px 10px;">
                     <div style="text-align:left;">
@@ -379,6 +401,7 @@
                 </div>
 
                 <button id="settings-done-btn" class="btn green small" style="font-size:16px;padding:8px 12px;margin-top:2px;">DONE</button>
+                <div id="game-version" style="font-size:12px;color:#7a8396;letter-spacing:.5px;">Version 4.07.1</div>
             </div>
         </div>
 
@@ -483,6 +506,11 @@
     })();
     (() => {
         'use strict';
+        // Version = MINOR.BIG.PATCH (e.g. 1.20.1)
+        //   BIG   (middle, 2 digits): a boss or something super big. Never resets.
+        //   MINOR (first): a smaller feature, e.g. 2 more power-ups. Resets to 0 on a BIG update.
+        //   PATCH (last):  a bug fix or performance patch. Resets to 0 on a BIG or MINOR update.
+        const GAME_VERSION = '4.07.1';
 
         const canvas = document.getElementById('gameCanvas');
         let ctx = canvas.getContext('2d', { alpha: false });   // 'let': the boss menu briefly points it at its preview canvases
@@ -594,6 +622,8 @@
             playShieldBreak() { this.tone('square', 300, 100, 0.25, 0.3); }
             playHit()   { this.tone('sawtooth', 160, 40, 0.2, 0.4); }
             playSplat() { this.tone('sawtooth', 120, 20, 0.3, 0.5); this.noise(0.25, 0.5, 900); }
+            playThunder(v = 1) { this.noise(1.4 * v + 0.3, 0.55 * v, 260); this.tone('sawtooth', 70, 30, 1.0 * v, 0.35 * v); }
+            playWind() { this.noise(0.9, 0.18, 700); }
             playDrip() { this.tone('sine', 520 + Math.random() * 200, 160, 0.06, 0.07); }
             playSlash() { this.tone('triangle', 800, 150, 0.15, 0.5); this.noise(0.12, 0.3, 4000); }
             playLaserCharge() {
@@ -672,6 +702,8 @@
             difficultyIndex: clamp(parseInt(store.get('fb_diff', '1')) || 1, 0, DIFFICULTIES.length - 1),
             goreLevel: ['full', 'light', 'none'].includes(store.get('fb_gore', 'full')) ? store.get('fb_gore', 'full') : 'full',
             screenShake: store.get('fb_shake', '1') !== '0',
+            weatherOn: store.get('fb_weather', '1') !== '0',
+            perf: store.get('fb_perf', '0') === '1',
             frameCount: 0,
             groundOffset: 0,
             dayNightTime: 0,
@@ -694,6 +726,7 @@
 
         let pipes = [], thwops = [], powerupOrbs = [], particles = [], clouds = [], stars = [];
         let bloodDrops = [], chunks = [], puddles = [], ropes = [];
+        let strands = [], wetSpots = [], lensBlood = [];
         let bossLasers = [], bossSpikes = [], bossFalling = [], bossBalls = [], popups = [];
         let piranhaFireballs = [];
         let gloveHazards = [];
@@ -742,7 +775,13 @@
             ]
         };
         const slamWarner = { active: false, x: 0, width: 110, locked: false, t: 0 };
-        const move = { left: false, right: false };
+        const move = { left: false, right: false, last: 'right', tapL: 0, tapR: 0, ptrs: { left: new Set(), right: new Set() } };
+        // let go of everything (pause, blur, end of the fight...) so nothing can stay stuck held
+        function releaseMoves() {
+            move.left = move.right = false; move.tapL = move.tapR = 0;
+            move.ptrs.left.clear(); move.ptrs.right.clear();
+            document.querySelectorAll('.move-btn').forEach(b => b.classList.remove('pressed'));
+        }
 
         const currentSkin = () => SKINS[state.selectedSkinKey] || SKINS.classic;
         const speedFactor = () => state.activePowerups.slowmo ? 0.6 : 1.0;
@@ -754,6 +793,50 @@
         // settled gore (chunks, feathers, guts) lives on its own layer above the blood, so later splats never cover it
         const goreLayer = document.createElement('canvas');
         const gctx = goreLayer.getContext('2d');
+        // Performance: these layers are full-screen, but blood and gore only ever sit in a few bands
+        // (mostly the floor). Every path/draw call on them records the rows it touches (in layer pixels),
+        // so each frame only that band is copied to the screen, and nothing at all while a layer is empty.
+        function trackLayer(g, L) {
+            L.y0 = Infinity; L.y1 = -Infinity; L.off = false;
+            const mark = (x, y, r) => {
+                if (L.off) return;
+                const m = g.getTransform();
+                const Y = m.b * x + m.d * y + m.f;
+                const ext = r ? r * Math.hypot(m.b, m.d) : 0;
+                if (Y - ext < L.y0) L.y0 = Y - ext;
+                if (Y + ext > L.y1) L.y1 = Y + ext;
+            };
+            const wrap = (name, fn) => { const o = g[name].bind(g); g[name] = function (...a) { fn(a); return o(...a); }; };
+            wrap('moveTo', a => mark(a[0], a[1], 0));
+            wrap('lineTo', a => mark(a[0], a[1], 0));
+            wrap('quadraticCurveTo', a => { mark(a[0], a[1], 0); mark(a[2], a[3], 0); });
+            wrap('bezierCurveTo', a => { mark(a[0], a[1], 0); mark(a[2], a[3], 0); mark(a[4], a[5], 0); });
+            wrap('arc', a => mark(a[0], a[1], a[2]));
+            wrap('ellipse', a => mark(a[0], a[1], Math.max(a[2], a[3])));
+            wrap('rect', a => { mark(a[0], a[1], 0); mark(a[0], a[1] + a[3], 0); });
+            wrap('fillRect', a => { mark(a[0], a[1], 0); mark(a[0], a[1] + a[3], 0); });
+            wrap('drawImage', a => { if (a.length >= 9) { mark(a[5], a[6], 0); mark(a[5], a[6] + a[8], 0); } else { const h = a.length >= 5 ? a[4] : (a[0].height || 0); mark(a[1], a[2], 0); mark(a[1], a[2] + h, 0); } });
+            wrap('fill', () => {});
+        }
+        const BL = {}, GL = {};
+        trackLayer(bctx, BL); trackLayer(gctx, GL);
+        function resetBand(L) { L.y0 = Infinity; L.y1 = -Infinity; }
+        // copy only the painted rows of a layer onto the screen (lines are padded for stroke width)
+        function blitLayer(layer, L) {
+            if (!(L.y1 > L.y0)) return;
+            const pad = 14 * dpr;
+            const sy = Math.max(0, Math.floor(L.y0 - pad)), ey = Math.min(layer.height, Math.ceil(L.y1 + pad));
+            if (ey <= sy) return;
+            ctx.drawImage(layer, 0, sy, layer.width, ey - sy, 0, sy / dpr, state.width, (ey - sy) / dpr);
+        }
+        // fill over just the painted band of a layer (used for clotting / rain wash) without growing it
+        function fillBand(g, L) {
+            if (!(L.y1 > L.y0)) return;
+            const pad = 14 * dpr;
+            L.off = true;
+            g.fillRect(0, (L.y0 - pad) / dpr, state.width, (L.y1 - L.y0 + pad * 2) / dpr);
+            L.off = false;
+        }
         function resizeBloodLayer() {
             bloodLayer.width = canvas.width;
             bloodLayer.height = canvas.height;
@@ -761,11 +844,15 @@
             goreLayer.width = canvas.width;
             goreLayer.height = canvas.height;
             gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            resetBand(BL); resetBand(GL);
         }
         function clearBlood() {
             bctx.clearRect(0, 0, state.width, state.height);
             gctx.clearRect(0, 0, state.width, state.height);
+            resetBand(BL); resetBand(GL);
             bloodDrops = []; chunks = []; puddles = []; ropes = [];
+            strands = []; wetSpots = []; lensBlood = [];
+            pools = []; _poolCell.clear();
             for (const k in _jet) delete _jet[k];
             pipes.forEach(p => p.stains = []);
         }
@@ -802,6 +889,7 @@
                 this.deathType = 'NONE';
                 this.impalerThwop = null;
                 this.bisectedParts = null;
+                this.cutLinks = null;
                 this.isCrushed = false;
                 this.resting = false;
                 this.bloodLeft = 1;
@@ -824,7 +912,7 @@
                 }
 
                 const diff = DIFFICULTIES[state.difficultyIndex];
-                this.velocity += diff.gravity * (state.activePowerups.slowmo ? 0.75 : 1.0);
+                this.velocity += diff.gravity * (state.activePowerups.slowmo ? 0.75 : 1.0) + weatherLift();
                 this.y += this.velocity;
                 updateBirdMovement();
 
@@ -873,6 +961,7 @@
                 }
 
                 if (this.deathType === 'CUT_IN_HALF' && this.bisectedParts) {
+                    updateCutLinks();
                     const wI_half = 1 / 48;
                     ['left', 'right'].forEach(side => {
                         const p = this.bisectedParts[side];
@@ -1190,8 +1279,10 @@
                 }
 
                 if (this.deathType === 'CUT_IN_HALF' && this.bisectedParts) {
+                    drawCutLinks(c, 'gut');                               // guts hang behind the halves
                     drawSeveredHalf(c, skin, this.bisectedParts.left, 'LEFT');
                     drawSeveredHalf(c, skin, this.bisectedParts.right, 'RIGHT');
+                    drawCutLinks(c, 'nerve');                             // nerves come out of the cut faces
                     return;
                 }
 
@@ -1216,7 +1307,8 @@
 
                 if (!dead && state.activePowerups.shield) {
                     c.save();
-                    c.shadowColor = '#38bdf8'; c.shadowBlur = 12;
+                    c.strokeStyle = 'rgba(56,189,248,0.25)'; c.lineWidth = 9;      // soft glow without shadowBlur (it's slow on phones)
+                    c.beginPath(); c.arc(0, 0, 25, 0, Math.PI * 2); c.stroke();
                     c.strokeStyle = 'rgba(56, 189, 248, 0.8)';
                     c.lineWidth = 3;
                     c.fillStyle = 'rgba(56, 189, 248, 0.2)';
@@ -1361,6 +1453,175 @@
         }
 
         // Severed halves reuse the real bird art, clipped along a torn cut
+        // =====================================================
+        //       NERVES + GUTS BETWEEN THE TWO HALVES (cut in half)
+        // =====================================================
+        // Each strand is a short verlet rope pinned to a point on the cut face of each half. As the halves fly
+        // apart the strands stretch: they get thinner and paler, their fibres pull apart, and they pull the halves
+        // toward each other. Past their limit they snap; the two ends recoil and dangle from their halves.
+        function cutAnchor(part, side, i, inset) {
+            const dir = side === 'left' ? 1 : -1;
+            if (!part.jag) { part.jag = []; for (let k = 0; k <= 8; k++) part.jag.push(rand(-1.7, 1.7)); }
+            const lx = part.jag[i] - dir * inset, ly = -14 + i * 3.5;
+            const c = Math.cos(part.rot), s = Math.sin(part.rot);
+            return [part.x + lx * c - ly * s, part.y + lx * s + ly * c];
+        }
+        function makeLink(kind, iA, iB, segs, seg, brk) {
+            const L = bird.bisectedParts.left, R = bird.bisectedParts.right;
+            const a = cutAnchor(L, 'left', iA, 1.4), b = cutAnchor(R, 'right', iB, 1.4);
+            const nodes = [];
+            for (let k = 0; k <= segs; k++) {
+                const t = k / segs, sag = Math.sin(t * Math.PI) * rand(1, 4);
+                const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t + sag;
+                nodes.push({ x, y, px: x, py: y });
+            }
+            return { kind, iA, iB, nodes, seg, nat: segs * seg, brk, pinA: true, pinB: true, age: 0, ph: rand(0, 6.28) };
+        }
+        function setupCutLinks() {
+            bird.cutLinks = [];
+            if (!bird.bisectedParts || state.goreLevel === 'none') return;
+            const light = state.goreLevel === 'light';
+            // guts first (drawn behind), then the nerves / sinew strands
+            if (!light) {
+                bird.cutLinks.push(makeLink('gut', 4, 4, 15, 3.6, rand(120, 170)));
+                if (Math.random() < 0.7) bird.cutLinks.push(makeLink('gut', 6, 5, 11, 3.6, rand(85, 130)));
+            }
+            const idx = light ? [4] : [2, 4, 6];
+            for (const i of idx) {
+                const j = clamp(i + Math.round(rand(-1, 1)), 0, 8);
+                bird.cutLinks.push(makeLink('nerve', i, j, 9, rand(2.4, 3.4), rand(60, 190)));
+            }
+        }
+        function snapLink(Lk, at) {
+            // split into two dangling pieces: the first stays pinned to the left half, the second to the right
+            const a = Lk.nodes.slice(0, at + 1).map(n => ({ ...n }));
+            const b = Lk.nodes.slice(at).map(n => ({ ...n }));
+            const tipA = a[a.length - 1], tipB = b[0];
+            const ra = Lk.kind === 'gut' ? 4 : 6;                               // the torn ends whip back toward their half
+            const pa = Lk.nodes[0], pb = Lk.nodes[Lk.nodes.length - 1];
+            const ua = Math.hypot(pa.x - tipA.x, pa.y - tipA.y) || 1, ub = Math.hypot(pb.x - tipB.x, pb.y - tipB.y) || 1;
+            tipA.px = tipA.x - (pa.x - tipA.x) / ua * ra; tipA.py = tipA.y - (pa.y - tipA.y) / ua * ra;
+            tipB.px = tipB.x - (pb.x - tipB.x) / ub * ra; tipB.py = tipB.y - (pb.y - tipB.y) / ub * ra;
+            const s = Math.min(1, (Math.hypot(pa.x - pb.x, pa.y - pb.y) - Lk.nat) / Math.max(1, Lk.brk - Lk.nat));
+            const out = [
+                { kind: Lk.kind, iA: Lk.iA, nodes: a, seg: Lk.seg, nat: Lk.nat, brk: 1e9, pinA: true, pinB: false, torn: true, pale: s, age: 0, ph: Lk.ph },
+                { kind: Lk.kind, iB: Lk.iB, nodes: b, seg: Lk.seg, nat: Lk.nat, brk: 1e9, pinA: false, pinB: true, torn: true, pale: s, age: 0, ph: Lk.ph + 1 }
+            ];
+            // a spurt of blood from the tear, and a wet snap
+            const m = Lk.nodes[at];
+            for (let k = 0; k < (Lk.kind === 'gut' ? 7 : 3); k++) spawnDrop(m.x, m.y, rand(-2.5, 2.5), rand(-3, 0.5), rand(0.9, Lk.kind === 'gut' ? 2.4 : 1.6), 1, 1);
+            try { Lk.kind === 'gut' ? sound.tone('sawtooth', 220, 70, 0.14, 0.18) : sound.tone('triangle', 1300, 420, 0.05, 0.12); } catch (e) {}
+            return out;
+        }
+        function updateCutLinks() {
+            const P = bird.bisectedParts, links = bird.cutLinks;
+            if (!P || !links || !links.length) return;
+            const gy = groundY();
+            const next = [];
+            for (const Lk of links) {
+                Lk.age++;
+                const N = Lk.nodes, grav = Lk.kind === 'gut' ? 0.34 : 0.2, damp = Lk.kind === 'gut' ? 0.985 : 0.975;
+                const A = Lk.pinA ? cutAnchor(P.left, 'left', Lk.iA, 1.4) : null;
+                const B = Lk.pinB ? cutAnchor(P.right, 'right', Lk.iB, 1.4) : null;
+                // verlet step
+                for (let k = 0; k < N.length; k++) {
+                    const n = N[k];
+                    const vx = (n.x - n.px) * damp, vy = (n.y - n.py) * damp + grav;
+                    n.px = n.x; n.py = n.y; n.x += vx; n.y += vy;
+                }
+                // constraints: segments try to keep their length (nerves are springier), ends stay on the halves
+                const stiff = Lk.kind === 'gut' ? 0.5 : 0.42;
+                for (let it = 0; it < 5; it++) {
+                    if (A) { N[0].x = A[0]; N[0].y = A[1]; }
+                    if (B) { N[N.length - 1].x = B[0]; N[N.length - 1].y = B[1]; }
+                    for (let k = 0; k < N.length - 1; k++) {
+                        const a = N[k], b = N[k + 1], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.001;
+                        const f = (d - Lk.seg) / d * stiff;
+                        const wa = (k === 0 && A) ? 0 : 1, wb = (k + 1 === N.length - 1 && B) ? 0 : 1, w = wa + wb || 1;
+                        a.x += dx * f * wa / w * 2 * 0.5; a.y += dy * f * wa / w * 2 * 0.5;
+                        b.x -= dx * f * wb / w * 2 * 0.5; b.y -= dy * f * wb / w * 2 * 0.5;
+                    }
+                }
+                if (A) { N[0].x = A[0]; N[0].y = A[1]; }
+                if (B) { N[N.length - 1].x = B[0]; N[N.length - 1].y = B[1]; }
+                // the floor and the pipes
+                for (const n of N) {
+                    if (n.y > gy + 5) { n.y = gy + 5; n.px = n.x - (n.x - n.px) * 0.4; n.py = n.y; }
+                    if (Lk.kind === 'gut' && pushOutOfPipes(n, 2, 0.1)) n.px = n.x;
+                }
+                if (A && B) {
+                    const d = Math.hypot(A[0] - B[0], A[1] - B[1]);
+                    Lk.stretch = clamp((d - Lk.nat) / Math.max(1, Lk.brk - Lk.nat), 0, 1);
+                    if (d > Lk.nat) {
+                        // tension pulls the halves toward each other (a bit; they're much heavier than a strand)
+                        const ux = (B[0] - A[0]) / d, uy = (B[1] - A[1]) / d;
+                        const f = Math.min(Lk.kind === 'gut' ? 0.09 : 0.03, (d - Lk.nat) * (Lk.kind === 'gut' ? 0.0016 : 0.0006));
+                        // only while a half is in the air: on the floor, friction holds it where it landed
+                        if (!P.left.rest && P.left.y < gy - 12) { P.left.vx += ux * f; P.left.vy += uy * f; }
+                        if (!P.right.rest && P.right.y < gy - 12) { P.right.vx -= ux * f; P.right.vy -= uy * f; }
+                    }
+                    if (d > Lk.brk) { next.push(...snapLink(Lk, clamp(Math.floor(N.length / 2 + rand(-2, 2)), 1, N.length - 2))); continue; }
+                }
+                // blood drips off the strands now and then
+                if (Math.random() < (Lk.kind === 'gut' ? 0.05 : 0.015) * (Lk.age < 300 ? 1 : 0.3)) {
+                    const n = N[Math.floor(rand(0, N.length))];
+                    if (n.y < gy) spawnDrop(n.x, n.y + 1, rand(-0.3, 0.3), 0.4, rand(0.7, Lk.kind === 'gut' ? 1.6 : 1.1), 1, 1);
+                }
+                next.push(Lk);
+            }
+            bird.cutLinks = next;
+        }
+        // smooth curve through the rope's nodes
+        function linkPath(c, N) {
+            c.beginPath(); c.moveTo(N[0].x, N[0].y);
+            for (let k = 1; k < N.length - 1; k++) c.quadraticCurveTo(N[k].x, N[k].y, (N[k].x + N[k + 1].x) / 2, (N[k].y + N[k + 1].y) / 2);
+            const l = N[N.length - 1]; c.lineTo(l.x, l.y);
+        }
+        function drawCutLinks(c, which) {
+            const links = bird.cutLinks;
+            if (!links || !links.length) return;
+            c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+            for (const Lk of links) {
+                if (Lk.kind !== which) continue;
+                const N = Lk.nodes, s = Lk.torn ? (Lk.pale || 0) * 0.7 : (Lk.stretch || 0);
+                if (which === 'gut') {
+                    // intestine: thick, segmented, glossy; it thins as it is pulled
+                    const k = 1 - s * 0.45;
+                    linkPath(c, N); c.strokeStyle = '#3a0409'; c.lineWidth = 5.6 * k; c.stroke();
+                    linkPath(c, N); c.strokeStyle = s > 0.5 ? '#d97a86' : '#c9505f'; c.lineWidth = 3.9 * k; c.stroke();
+                    c.save(); c.translate(0, -0.9 * k); linkPath(c, N); c.strokeStyle = 'rgba(255,190,200,0.85)'; c.lineWidth = 1.2 * k; c.stroke(); c.restore();
+                    c.strokeStyle = 'rgba(90,10,22,0.65)'; c.lineWidth = 0.9;                       // segment rings
+                    c.beginPath();
+                    for (let i = 1; i < N.length - 1; i += 2) {
+                        const dx = N[i + 1].x - N[i - 1].x, dy = N[i + 1].y - N[i - 1].y, d = Math.hypot(dx, dy) || 1, nx = -dy / d * 2.3 * k, ny = dx / d * 2.3 * k;
+                        c.moveTo(N[i].x - nx, N[i].y - ny); c.lineTo(N[i].x + nx, N[i].y + ny);
+                    }
+                    c.stroke();
+                    if (Lk.torn) {                                                                        // ragged, bloody torn end
+                        const tip = Lk.pinA ? N[N.length - 1] : N[0];
+                        c.fillStyle = '#7a0d17'; c.beginPath(); c.arc(tip.x, tip.y, 3 * k, 0, BTAU); c.fill();
+                        c.fillStyle = '#d63a46'; c.beginPath(); c.arc(tip.x, tip.y, 1.6 * k, 0, BTAU); c.fill();
+                    }
+                } else {
+                    // nerve: a thin dark-red thread. It thins a little more as it stretches, and stays subtle
+                    const w = 1.5 - s * 0.8;
+                    const col = lerpColor([150, 18, 30], [196, 40, 52], s);
+                    c.globalAlpha = 0.7;
+                    linkPath(c, N); c.strokeStyle = rgbToStr(col, 1); c.lineWidth = w; c.stroke();
+                    c.globalAlpha = 1;
+                    if (Lk.torn) {                                                                        // frayed tip
+                        const tip = Lk.pinA ? N[N.length - 1] : N[0], pre = Lk.pinA ? N[N.length - 2] : N[1];
+                        const dx = tip.x - pre.x, dy = tip.y - pre.y, d = Math.hypot(dx, dy) || 1;
+                        c.strokeStyle = rgbToStr(col, 0.6); c.lineWidth = 0.5;
+                        c.beginPath();
+                        for (const a of [-0.6, 0, 0.6]) { const ca = Math.cos(a), sa = Math.sin(a); c.moveTo(tip.x, tip.y); c.lineTo(tip.x + (dx * ca - dy * sa) / d * 3, tip.y + (dx * sa + dy * ca) / d * 3); }
+                        c.stroke();
+                    }
+                }
+            }
+            c.restore();
+        }
+
         function drawSeveredHalf(c, skin, part, side) {
             if (!part.jag) { part.jag = []; for (let i = 0; i <= 8; i++) part.jag.push(rand(-1.7, 1.7)); }
             const dir = side === 'LEFT' ? 1 : -1;          // +1: kept half lies to the left of the cut
@@ -1453,7 +1714,7 @@
         function spawnDrop(x, y, vx, vy, r, gen = 0, ci = -1, prev = null) {
             // "Remove Gore": no blood is ever created, whatever path asked for it (returns an inert, already-dead drop)
             if (state.goreLevel === 'none') return { dead: true, type: 0, x, y, vx, vy, r, prev: null };
-            if (bloodDrops.length > 1400) return { dead: true, x, y, vx, vy, r, prev: null, type: 0 };   // hard safety cap only
+            if (bloodDrops.length > (state.perf ? 500 : 1400)) return { dead: true, x, y, vx, vy, r, prev: null, type: 0 };   // hard safety cap only
             if (ci < 0) { const q = Math.random(); ci = q < 0.2 ? 0 : (q < 0.7 ? 1 : 2); }
             const d = { type: 0, x, y, vx, vy, r, gen, ci, prev, dead: false, age: 0, depth: rand(1, 12) };
             // drops born after the death burst (drips, ooze, splash droplets) keep falling but don't stamp new splats
@@ -1464,9 +1725,9 @@
 
         function spawnMist(x, y, vx, vy) {
             if (state.goreLevel === 'none') return;
-            if (bloodDrops.length > 1400) return;
-            const life = rand(14, 32);
-            bloodDrops.push({ type: 1, x, y, vx, vy, r: rand(1.2, 3), life, maxLife: life, dead: false });
+            if (bloodDrops.length > (state.perf ? 500 : 1400)) return;
+            const life = rand(22, 46);
+            bloodDrops.push({ type: 1, x, y, vx, vy, r: rand(2.5, 5.5), life, maxLife: life, dead: false });
         }
 
         // Heartbeat-driven spurt from one wound. Drops of one pulse are linked into a jet.
@@ -1618,9 +1879,22 @@
             const nMeat = heavy ? 8 : (state.goreLevel === 'light' ? 2 : 5);
             const nBone = state.goreLevel === 'light' ? 0 : (heavy ? 4 : 2);
             const nOrgan = state.goreLevel === 'light' ? 0 : (heavy ? 2 : 1);
-            for (let i = 0; i < nMeat; i++) addChunk('meat', x, y, rand(2, 8), hvx, hvy, null, rand(2.6, 5));
+            const soft = [];
+            for (let i = 0; i < nMeat; i++) soft.push(addChunk('meat', x, y, rand(2, 8), hvx, hvy, null, rand(2.6, 5)));
             for (let i = 0; i < nBone; i++) addChunk('bone', x, y, rand(2, 7), hvx, hvy, null, rand(5, 9));
-            for (let i = 0; i < nOrgan; i++) addChunk('organ', x, y, rand(1.5, 5), hvx, hvy, null, rand(3, 4.4));
+            for (let i = 0; i < nOrgan; i++) soft.push(addChunk('organ', x, y, rand(1.5, 5), hvx, hvy, null, rand(3, 4.4)));
+            if (state.goreLevel === 'full') {
+                // stringy strands of blood between some of the torn pieces
+                const nS = heavy ? 4 : 2;
+                for (let i = 0; i < nS && i + 1 < soft.length; i++) linkStrand(soft[i], soft[i + 1]);
+                // recognisable bits of bird
+                if (heavy || Math.random() < 0.5) addChunk('wing', x, y, rand(2, 6), hvx, hvy, null, rand(7, 9));
+                if (heavy && Math.random() < 0.6) addChunk('wing', x, y, rand(2, 6), hvx, hvy, null, rand(7, 9));
+                if (heavy || Math.random() < 0.5) addChunk('foot', x, y, rand(2, 7), hvx, hvy, null, rand(4.5, 5.5));
+                if (heavy && Math.random() < 0.6) addChunk('beak', x, y, rand(3, 7), hvx, hvy, null, rand(4.5, 5.5));
+                if (heavy && Math.random() < 0.5) addChunk('skull', x, y, rand(2, 6), hvx, hvy, null, rand(4.5, 5.5));
+                if (heavy) spawnLensBlood(x, y);
+            }
             if (heavy && state.goreLevel === 'full') {
                 const nEye = Math.random() < 0.5 ? 1 : 2;
                 for (let i = 0; i < nEye; i++) addChunk('eye', x, y, rand(3, 7), hvx, hvy, null, rand(3.2, 4));
@@ -1658,9 +1932,12 @@
             }
             if (type === 'meat') c.fat = Math.random() < 0.6;
             if (type === 'bone') c.jag = [rand(0.6, 1.6), rand(-1, 1), rand(0.4, 1.4)];
+            c.hard = type === 'bone' || type === 'beak' || type === 'skull' || type === 'foot';
+            if (type === 'wing' || type === 'foot') c.vr *= 0.6;
             c.squash = 0; c.stuck = null; c.slide = 0;
             if (type === 'feather') c.bloody = state.goreLevel === 'none' ? false : (Math.random() < 0.5);
             chunks.push(c);
+            return c;
         }
 
         // ---------- entrails: verlet ropes ----------
@@ -1772,21 +2049,141 @@
         }
 
         // ---------- ground splatter ----------
-        // No blood pools: anything that used to start a pool stamps a splatter burst instead,
-        // and anything that used to feed a pool leaves the odd fresh drip mark.
-        function addPuddle(x, y, maxR) {
-            if (state.goreLevel === 'none') return;
-            if (state.goreLevel === 'light') maxR *= 0.6;
-            stampSplatter(x, y, Math.min(9, maxR * 0.28));
+        // ---------- dynamic blood pools ----------
+        // Blood that lands close together gathers into pools. A pool holds a volume: every drop that falls in
+        // adds to it, sends a ripple across the surface and throws up a tiny splash. Its edge creeps outward
+        // slowly (thick blood), pools that touch flow into one, and the surface darkens and loses its shine as it clots.
+        // They are drawn live every frame (not baked), under the gore and over the dried splatter.
+        let pools = [];
+        const _poolCell = new Map();                                // blood landed per stretch of floor, before a pool exists there
+        function poolAt(x, pad) {
+            for (const P of pools) if (Math.abs(x - P.x) < P.r * 0.92 + (pad || 0)) return P;
+            return null;
         }
-        function growPuddleAt(x, amount) {
-            if (state.goreLevel === 'none') return true;
-            if (Math.random() < Math.min(0.6, amount * 0.5)) {
-                const gy = groundY() + rand(2, 10);
-                stampDrip(x + rand(-10, 10), gy, rand(0.9, 1.8) * (state.goreLevel === 'light' ? 0.7 : 1));
+        function poolRipple(P, x, strength) {
+            if (P.rip.length > 5) P.rip.shift();
+            P.rip.push({ x: clamp(x - P.x, -P.r * 0.8, P.r * 0.8), r: 1.5, a: Math.min(1, 0.45 + strength * 0.2) });
+        }
+        function newPool(x, vol) {
+            const maxPools = state.perf ? 3 : 6;
+            if (pools.length >= maxPools) {                         // floor is full: feed the nearest pool instead
+                let best = pools[0]; for (const P of pools) if (Math.abs(P.x - x) < Math.abs(best.x - x)) best = P;
+                best.vol += vol; return best;
             }
-            return true;
+            const n = 14, noise = [];
+            for (let i = 0; i < n; i++) noise.push(1 + rand(-0.2, 0.24));
+            for (let i = 0; i < n; i++) noise[i] = (noise[(i + n - 1) % n] + noise[i] * 2 + noise[(i + 1) % n]) / 4;
+            [0, n / 2].forEach(a => { noise[(a + (Math.random() < 0.5 ? 0 : 1)) % n] *= rand(1.25, 1.6); });   // fingers where it runs along the floor
+            const P = { x, y: groundY() + rand(6, 9), vol, r: 2, age: 0, noise, rip: [], ph: rand(0, 6.28) };
+            pools.push(P);
+            return P;
         }
+        // add blood to the floor at x: into the pool there, or toward starting a new one
+        function addPoolVolume(x, vol, ripple) {
+            if (state.goreLevel === 'none' || vol <= 0) return null;
+            if (state.goreLevel === 'light') vol *= 0.45;
+            const P = poolAt(x, 4);
+            if (P) {
+                P.vol += vol; P.age = Math.max(0, P.age - vol * 6);       // fresh blood keeps it wet and red
+                if (ripple) poolRipple(P, x, ripple);
+                return P;
+            }
+            // blood landing near a pool trickles into it rather than starting another one right beside it
+            for (const Q of pools) if (Math.abs(x - Q.x) < Q.r + 70) { Q.vol += vol * 0.4; return null; }
+            const key = Math.floor(x / 36), v = (_poolCell.get(key) || 0) + vol;
+            if (v > 40) { _poolCell.delete(key); return newPool(key * 36 + 18 + rand(-5, 5), v * 0.6); }
+            _poolCell.set(key, v);
+            return null;
+        }
+        // (old names, still called from the corpse, chunks and guts code)
+        function addPuddle(x, y, maxR) { addPoolVolume(x, maxR * maxR * 0.09, 0.6); }
+        function growPuddleAt(x, amount) { return !!addPoolVolume(x, amount * 0.45, 0); }
+
+        function updatePools() {
+            const lim = state.goreLevel === 'light' ? 30 : 58;
+            for (let i = pools.length - 1; i >= 0; i--) {
+                const P = pools[i];
+                P.age++;
+                const R = Math.min(lim, 2.9 * Math.sqrt(P.vol));
+                if (P.r < R) P.r += Math.max(0.02, (R - P.r) * 0.022);        // viscous creep outward
+                else if (P.r > R + 1) P.r -= 0.03;                             // washed thinner by rain
+                if (P.vol < 3) { pools.splice(i, 1); continue; }
+                for (let k = P.rip.length - 1; k >= 0; k--) { const q = P.rip[k]; q.r += 0.9; q.a -= 0.022; if (q.a <= 0 || q.r > P.r) P.rip.splice(k, 1); }
+                // pools that touch flow together (the bigger one swallows the smaller)
+                for (let j = i - 1; j >= 0; j--) {
+                    const Q = pools[j];
+                    if (Math.abs(P.x - Q.x) < (P.r + Q.r) * 0.7) {
+                        const big = P.vol >= Q.vol ? P : Q, small = big === P ? Q : P, vt = P.vol + Q.vol;
+                        big.x = (P.x * P.vol + Q.x * Q.vol) / vt; big.vol = vt; big.age = Math.min(P.age, Q.age);
+                        poolRipple(big, small.x, 1);
+                        pools.splice(pools.indexOf(small), 1);
+                        break;
+                    }
+                }
+            }
+            // rain patters on the surface
+            if (weather.k > 0.3 && (weather.kind === 'rain' || weather.kind === 'storm') && pools.length && Math.random() < 0.25) {
+                const P = pick(pools); poolRipple(P, P.x + rand(-P.r, P.r) * 0.7, 0.2);
+            }
+        }
+
+        function drawPools() {
+            if (!pools.length) return;
+            ctx.save();
+            for (const P of pools) {
+                const r = P.r, sy = Math.min(0.2, 7.5 / r);                  // seen edge-on: a thin lens lying on the floor
+                const t = Math.min(1, P.age / 1500), wet = 1 - t;
+                const n = P.noise.length;
+                const edge = (k0) => {
+                    ctx.beginPath();
+                    for (let i = 0; i <= n; i++) {
+                        const a = i / n * BTAU, am = (i + 0.5) / n * BTAU;
+                        const k = P.noise[i % n] * k0, km = (P.noise[i % n] + P.noise[(i + 1) % n]) / 2 * k0;
+                        const wob = 1 + 0.012 * Math.sin(state.frameCount * 0.05 + i * 1.7 + P.ph) * wet;   // surface never quite still while wet
+                        const x = Math.cos(a) * r * k * wob, y = Math.sin(a) * r * k * wob;
+                        if (!i) ctx.moveTo(x, y);
+                        else ctx.quadraticCurveTo(Math.cos(a - 0.22) * r * k * 1.06, Math.sin(a - 0.22) * r * k * 1.06, x, y);
+                        void am; void km;
+                    }
+                    ctx.closePath();
+                };
+                ctx.save();
+                ctx.translate(P.x, P.y); ctx.scale(1, sy);
+                // body: deep red in the middle, darker where it is thin and drying at the rim
+                const cA = lerpColor([196, 22, 32], [86, 9, 15], t), cB = lerpColor([128, 10, 20], [52, 5, 9], t);
+                const g = ctx.createRadialGradient(-r * 0.15, -r * 0.1, r * 0.05, 0, 0, r * 1.25);
+                g.addColorStop(0, rgbToStr(cA, 0.97)); g.addColorStop(0.6, rgbToStr(cA, 0.95)); g.addColorStop(1, rgbToStr(cB, 0.95));
+                edge(1); ctx.fillStyle = g; ctx.fill();
+                ctx.strokeStyle = `rgba(46,3,7,${0.65 + 0.2 * t})`; ctx.lineWidth = 2.2 / Math.max(0.5, sy * 4); ctx.stroke();
+                ctx.save(); edge(1); ctx.clip();
+                // the sky mirrored in the wet surface: a broad soft band and a sharper streak
+                ctx.fillStyle = `rgba(255,220,225,${0.2 * wet})`;
+                ctx.beginPath(); ctx.ellipse(-r * 0.12, -r * 0.42, r * 0.7, r * 0.3, 0, 0, BTAU); ctx.fill();
+                ctx.fillStyle = `rgba(255,255,255,${0.42 * wet})`;
+                ctx.beginPath(); ctx.ellipse(-r * 0.3, -r * 0.5, r * 0.34, r * 0.1, -0.08, 0, BTAU); ctx.fill();
+                // ripples spreading from where something landed
+                for (const q of P.rip) {
+                    ctx.strokeStyle = `rgba(255,190,195,${q.a * 0.75})`; ctx.lineWidth = 1.6 / Math.max(0.5, sy * 4);
+                    ctx.beginPath(); ctx.arc(q.x, 0, q.r, 0, BTAU); ctx.stroke();
+                    ctx.strokeStyle = `rgba(46,3,7,${q.a * 0.55})`;
+                    ctx.beginPath(); ctx.arc(q.x, 0, q.r + 2.2, 0, BTAU); ctx.stroke();
+                }
+                // clotting: darker islands of skin form as it dries
+                if (t > 0.25) {
+                    ctx.fillStyle = `rgba(40,3,6,${(t - 0.25) * 0.5})`;
+                    for (let k = 0; k < 4; k++) { const a = P.ph + k * 1.7; ctx.beginPath(); ctx.ellipse(Math.cos(a) * r * 0.45, Math.sin(a) * r * 0.5, r * 0.26, r * 0.2, a, 0, BTAU); ctx.fill(); }
+                }
+                ctx.restore();
+                ctx.restore();
+                // a glint that twinkles while the pool is fresh
+                if (wet > 0.3) {
+                    ctx.fillStyle = `rgba(255,255,255,${0.8 * wet * (0.55 + 0.45 * Math.sin(state.frameCount * 0.08 + P.ph))})`;
+                    ctx.beginPath(); ctx.arc(P.x - r * 0.45, P.y - r * sy * 0.45, 0.9, 0, BTAU); ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+
         // one small drip mark on the ground: a round drop with a thin wet rim and maybe a fleck beside it
         function stampDrip(x, y, r) {
             const col = BLOOD_PAL[Math.floor(rand(1, 4))];
@@ -1827,6 +2224,20 @@
 
         function splatOnGround(p, y) {
             if (state.goreLevel === 'none') return;
+            {
+                const P = poolAt(p.x, 0);
+                if (P) {                                              // plop: the pool takes it, ripples and spits a droplet or two back up
+                    addPoolVolume(p.x, p.r * p.r * 0.45, p.r);
+                    const sp0 = Math.hypot(p.vx, p.vy);
+                    if (p.gen < 1 && p.r > 1.5 && sp0 > 4 && state.goreLevel !== 'light') {
+                        const n = 1 + (sp0 > 8 ? 1 : 0);
+                        for (let i = 0; i < n; i++) spawnDrop(p.x + rand(-2, 2), y - 2, rand(-1.4, 1.4), -sp0 * rand(0.16, 0.3), p.r * rand(0.3, 0.45), 2, p.ci);
+                    }
+                    if (p.r > 2.2 && sp0 > 6) splatSound();
+                    return;
+                }
+                addPoolVolume(p.x, p.r * p.r * (p.late ? 0.7 : 0.4), 0);
+            }
             if (p.late) {
                 stampDrip(p.x, y, Math.max(0.7, p.r * 0.8));               // late drips leave their own little drip marks
                 return;
@@ -1848,11 +2259,29 @@
             bctx.save();
             bctx.globalAlpha = 0.92;
             bctx.fillStyle = col;
-            bctx.beginPath(); bctx.ellipse(p.x, y, rx, ry, 0, 0, BTAU); bctx.fill();
-            // drying edge: blood cells pile up at the rim (coffee-ring), so the outline reads darker
             if (p.r > 1.3) {
-                bctx.strokeStyle = 'rgba(66,3,7,0.6)'; bctx.lineWidth = 0.6;
-                bctx.beginPath(); bctx.ellipse(p.x, y, rx, ry, 0, 0, BTAU); bctx.stroke();
+                // an irregular, lobed stain (real spatter is never a clean oval), darker where it dries at the rim
+                // and brighter in the wet middle
+                const lobes = 9, ks = [];
+                for (let i = 0; i < lobes; i++) ks.push(rand(0.72, 1.3));
+                const blob = (k0) => {
+                    bctx.beginPath();
+                    for (let i = 0; i <= lobes; i++) {
+                        const a0 = i / lobes * BTAU, a1 = (i + 0.5) / lobes * BTAU, k = ks[i % lobes] * k0, k2 = (ks[i % lobes] + ks[(i + 1) % lobes]) / 2 * k0;
+                        const mx = p.x + Math.cos(a1) * rx * k2, my = y + Math.sin(a1) * ry * k2;
+                        if (!i) bctx.moveTo(p.x + Math.cos(a0) * rx * k, y + Math.sin(a0) * ry * k);
+                        bctx.quadraticCurveTo(p.x + Math.cos(a0 + 0.2) * rx * k * 1.08, y + Math.sin(a0 + 0.2) * ry * k * 1.08, mx, my);
+                    }
+                    bctx.closePath();
+                };
+                blob(1); bctx.fill();
+                bctx.strokeStyle = 'rgba(52,2,6,0.7)'; bctx.lineWidth = 0.8; bctx.stroke();
+                bctx.fillStyle = BLOOD_PAL[Math.max(0, p.ci - 1)]; bctx.globalAlpha = 0.55;
+                blob(0.55); bctx.fill();
+                bctx.globalAlpha = 0.92; bctx.fillStyle = col;
+                if (p.r > 1.7) { if (wetSpots.length > 70) wetSpots.shift(); wetSpots.push({ x: p.x, y, rx, ry, age: 0, ph: rand(0, 6.28) }); }
+            } else {
+                bctx.beginPath(); bctx.ellipse(p.x, y, rx, ry, 0, 0, BTAU); bctx.fill();
             }
             // hard impacts throw thin spines out of the rim (the scalloped edge of real spatter)
             const We0 = p.r * sp * sp / 7;
@@ -2058,9 +2487,11 @@
 
         function updateBlood() {
             const gy = groundY();
+            if (state.frameCount % 2 === 0) coalesceDrops();          // drops that touch at low speed fuse into bigger ones
             // keep the newest ~750 drops; trimming happens here, never while the array is being walked
-            if (bloodDrops.length > 900) {
-                const cut = bloodDrops.length - 900;
+            const dropKeep = state.perf ? 400 : 900;
+            if (bloodDrops.length > dropKeep) {
+                const cut = bloodDrops.length - dropKeep;
                 for (let i = 0; i < cut; i++) bloodDrops[i].dead = true;
                 bloodDrops.splice(0, cut);
             }
@@ -2070,7 +2501,7 @@
                 if (p.dead) continue;
                 if (p.type === 1) {
                     p.vx *= 0.93; p.vy = p.vy * 0.93 + 0.01;
-                    p.x += p.vx; p.y += p.vy;
+                    p.x += p.vx; p.y += p.vy; p.r += 0.16;                // the puff spreads out as it thins
                     if (--p.life > 0) bloodDrops[j++] = p; else p.dead = true;
                     continue;
                 }
@@ -2145,7 +2576,17 @@
                     }
                 }
                 if (!gone && hitPipeWithDrop(p)) gone = true;
-                else if (!gone && p.y >= gy + p.depth) { splatOnGround(p, gy + p.depth); gone = true; }
+                else if (!gone && p.y >= gy + p.depth) {
+                    // a fast, shallow drop skids: it smears a streak, loses part of itself and hops on once
+                    if (!p.skid && !p.late && p.r > 1.1 && Math.abs(p.vx) > 3.2 && p.vy < Math.abs(p.vx) * 1.6 && Math.random() < 0.55) {
+                        const yy = gy + p.depth, dir = Math.sign(p.vx), len = Math.min(26, Math.abs(p.vx) * 2.2 * p.r);
+                        bctx.save(); bctx.globalAlpha = 0.9; bctx.fillStyle = BLOOD_PAL[Math.min(4, p.ci + 1)];
+                        bctx.beginPath(); bctx.moveTo(p.x, yy - p.r * 0.32); bctx.quadraticCurveTo(p.x + dir * len * 0.5, yy - p.r * 0.2, p.x + dir * len, yy);
+                        bctx.quadraticCurveTo(p.x + dir * len * 0.5, yy + p.r * 0.2, p.x, yy + p.r * 0.32); bctx.closePath(); bctx.fill();
+                        bctx.restore();
+                        p.skid = 1; p.y = yy - 1; p.vy = -Math.abs(p.vy) * 0.28 - 0.6; p.vx *= 0.62; p.r *= 0.78; p.gen = Math.max(1, p.gen);
+                    } else { splatOnGround(p, gy + p.depth); gone = true; }
+                }
                 else if (p.x < -60 || p.x > state.width + 60 || p.y < -300) gone = true;
                 if (gone) p.dead = true; else bloodDrops[j++] = p;
             }
@@ -2193,17 +2634,134 @@
             ctx.fillStyle = 'rgba(255,255,255,0.55)';
             ctx.beginPath();
             for (const p of bloodDrops) {
-                if (p.type !== 0 || p.r < 1.9) continue;
+                if (p.type !== 0 || p.r < 1.4) continue;
                 const hx = p.x - p.r * 0.3, hy = p.y - p.r * 0.3, hr = Math.max(0.5, p.r * 0.24);
                 ctx.moveTo(hx + hr, hy); ctx.arc(hx, hy, hr, 0, BTAU);
             }
             ctx.fill();
-            // fine red mist
-            ctx.fillStyle = '#b01a22';
+            // dark underside on the bigger drops: gives them volume
+            ctx.fillStyle = 'rgba(40,2,6,0.35)';
+            ctx.beginPath();
+            for (const p of bloodDrops) {
+                if (p.type !== 0 || p.r < 1.7 || p.vx * p.vx + p.vy * p.vy > 2.5) continue;   // only round, slow drops (fast ones are teardrops)
+                ctx.moveTo(p.x + p.r * 0.86, p.y + p.r * 0.12); ctx.arc(p.x, p.y, p.r * 0.87, 0.14, Math.PI - 0.14);
+            }
+            ctx.fill();
+            // red mist: soft puffs that spread and thin out
+            const ms = mistSprite();
             for (const p of bloodDrops) {
                 if (p.type !== 1) continue;
-                ctx.globalAlpha = (p.life / p.maxLife) * 0.35;
-                ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, BTAU); ctx.fill();
+                ctx.globalAlpha = (p.life / p.maxLife) * 0.5;
+                const d = p.r * 2.6;
+                ctx.drawImage(ms, p.x - d / 2, p.y - d / 2, d, d);
+            }
+            ctx.restore();
+        }
+        let _mistSprite = null;
+        function mistSprite() {
+            if (_mistSprite) return _mistSprite;
+            const c = document.createElement('canvas'); c.width = c.height = 48;
+            const g = c.getContext('2d'), gr = g.createRadialGradient(24, 24, 1, 24, 24, 24);
+            gr.addColorStop(0, 'rgba(200,24,34,0.85)'); gr.addColorStop(0.5, 'rgba(176,20,30,0.4)'); gr.addColorStop(1, 'rgba(160,16,26,0)');
+            g.fillStyle = gr; g.fillRect(0, 0, 48, 48);
+            return (_mistSprite = c);
+        }
+
+        // ---------- stringy strands ----------
+        // Thick blood and tissue hold together for a moment: torn chunks stay joined by a sagging strand that
+        // pulls on both ends, thins as it stretches, and finally snaps into a few droplets.
+        function linkStrand(a, b) {
+            if (strands.length >= 10) return;
+            strands.push({ a, b, max: rand(55, 120), age: 0 });
+        }
+        function updateStrands() {
+            for (let i = strands.length - 1; i >= 0; i--) {
+                const s = strands[i], a = s.a, b = s.b;
+                s.age++;
+                const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+                if (a.gone || b.gone || d > s.max || s.age > 240) {
+                    if (!a.gone && !b.gone || d < 200) {
+                        const n = 2 + Math.floor(d / 30);
+                        for (let k = 1; k <= n; k++) { const t = k / (n + 1); spawnDrop(a.x + dx * t, a.y + dy * t + Math.sin(t * Math.PI) * d * 0.12, ((a.vx || 0) + (b.vx || 0)) / 2 + rand(-0.8, 0.8), ((a.vy || 0) + (b.vy || 0)) / 2 + rand(-0.6, 0.6), rand(0.8, 1.7), 1, 1); }
+                    }
+                    strands.splice(i, 1); continue;
+                }
+                if (d > 14 && !a.stuck && !b.stuck) {                   // weak elastic pull on both ends
+                    const f = 0.0035 * (d - 14) / d;
+                    a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+                }
+            }
+        }
+        function drawStrands() {
+            if (!strands.length) return;
+            ctx.save(); ctx.lineCap = 'round';
+            for (const s of strands) {
+                const a = s.a, b = s.b, dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+                const k = d / s.max, sag = (1 - k) * 16 + 3;
+                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 + sag;
+                const w = Math.max(0.6, 3.4 * (1 - k * 0.85));
+                ctx.strokeStyle = BLOOD_EDGE; ctx.lineWidth = w + 1.2;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y); ctx.stroke();
+                ctx.strokeStyle = BLOOD_PAL[1]; ctx.lineWidth = w;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y); ctx.stroke();
+                // a bead of blood gathers at the lowest point of the strand
+                const bx = (a.x + 2 * mx + b.x) / 4, by = (a.y + 2 * my + b.y) / 4;
+                ctx.fillStyle = BLOOD_PAL[1]; ctx.beginPath(); ctx.ellipse(bx, by + w * 0.4, w * 0.9, w * 1.25, 0, 0, BTAU); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(bx - w * 0.3, by, Math.max(0.4, w * 0.25), 0, BTAU); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // ---------- blood on the camera ----------
+        // A big, messy death throws a few drops onto the "lens": they sit in front of everything,
+        // run slowly down the glass and fade. They keep to the edges so the middle of the screen stays clear.
+        function spawnLensBlood(x, y) {
+            if (state.goreLevel !== 'full' || state.perf) return;
+            const n = 3 + Math.floor(rand(0, 4));
+            for (let i = 0; i < n && lensBlood.length < 9; i++) {
+                const W = state.width, H = state.height;
+                let lx = Math.random() < 0.5 ? rand(10, W * 0.26) : rand(W * 0.74, W - 10), ly = rand(20, H * 0.75);
+                if (Math.random() < 0.35) { lx = rand(20, W - 20); ly = rand(12, H * 0.2); }
+                const ks = []; for (let k = 0; k < 9; k++) ks.push(rand(0.7, 1.3));
+                const sats = []; for (let k = 0; k < 4; k++) sats.push([rand(-2.2, 2.2), rand(-2, 2), rand(0.1, 0.28)]);
+                lensBlood.push({ x: lx, y: ly, r: rand(9, 24), ks, sats, run: 0, runV: rand(0.25, 0.8), age: 0, life: rand(190, 280) });
+            }
+        }
+        function updateLensBlood() {
+            for (let i = lensBlood.length - 1; i >= 0; i--) {
+                const b = lensBlood[i];
+                b.age++;
+                if (b.age > 14) { b.run += b.runV; b.runV *= 0.992; }
+                if (b.age > b.life) lensBlood.splice(i, 1);
+            }
+        }
+        function drawLensBlood() {
+            if (!lensBlood.length) return;
+            ctx.save(); ctx.lineCap = 'round';
+            for (const b of lensBlood) {
+                const a = Math.min(1, b.age / 4) * Math.min(1, (b.life - b.age) / 60);
+                const pop = b.age < 6 ? 0.6 + b.age / 15 : 1;                   // lands with a little splat
+                const r = b.r * pop;
+                ctx.globalAlpha = 0.82 * a;
+                const blob = (k0) => {
+                    ctx.beginPath();
+                    for (let i = 0; i <= 9; i++) { const ang = i / 9 * BTAU, k = b.ks[i % 9] * k0; const x = b.x + Math.cos(ang) * r * k, y = b.y + Math.sin(ang) * r * k * 0.9; i ? ctx.quadraticCurveTo(b.x + Math.cos(ang - 0.35) * r * k * 1.12, b.y + Math.sin(ang - 0.35) * r * k, x, y) : ctx.moveTo(x, y); }
+                    ctx.closePath();
+                };
+                // the run: a trail that thins, ending in a heavy bead
+                if (b.run > 1) {
+                    ctx.strokeStyle = '#8a0d15'; ctx.lineWidth = r * 0.34;
+                    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, b.y + b.run); ctx.stroke();
+                    ctx.fillStyle = '#a8111a'; ctx.beginPath(); ctx.ellipse(b.x, b.y + b.run, r * 0.26, r * 0.36, 0, 0, BTAU); ctx.fill();
+                }
+                ctx.fillStyle = '#5f0910'; blob(1.08); ctx.fill();
+                ctx.fillStyle = '#a8111a'; blob(1); ctx.fill();
+                ctx.fillStyle = '#c8161f'; blob(0.62); ctx.fill();
+                ctx.fillStyle = '#a8111a';
+                for (const [sx, sy, sr] of b.sats) { ctx.beginPath(); ctx.arc(b.x + sx * r, b.y + sy * r, sr * r, 0, BTAU); ctx.fill(); }
+                ctx.globalAlpha = 0.5 * a; ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.ellipse(b.x - r * 0.3, b.y - r * 0.35, r * 0.28, r * 0.13, -0.5, 0, BTAU); ctx.fill();
+                if (b.run > 1) { ctx.beginPath(); ctx.arc(b.x - r * 0.07, b.y + b.run - r * 0.1, r * 0.07, 0, BTAU); ctx.fill(); }
             }
             ctx.restore();
         }
@@ -2263,6 +2821,50 @@
                 g.beginPath(); g.moveTo(-sz * 0.5, sz * 0.1); g.quadraticCurveTo(-sz * 0.1, -sz * 0.1, sz * 0.4, sz * 0.2); g.moveTo(-sz * 0.1, -sz * 0.05); g.lineTo(-sz * 0.05, sz * 0.4); g.stroke();
                 g.fillStyle = 'rgba(255,255,255,0.5)';
                 g.beginPath(); g.ellipse(-sz * 0.4, -sz * 0.1, sz * 0.2, sz * 0.12, -0.6, 0, BTAU); g.fill();
+            } else if (c.type === 'wing') {
+                // a torn-off wing: three flight feathers, a bloody ragged root and the snapped wing bone poking out
+                const sk = currentSkin();
+                g.fillStyle = sk.wingColor; g.strokeStyle = '#1b2433'; g.lineWidth = 1.2;
+                g.beginPath(); g.moveTo(-sz * 0.5, -sz * 0.35);
+                g.quadraticCurveTo(sz * 0.5, -sz * 0.75, sz * 1.25, -sz * 0.15);
+                g.lineTo(sz * 0.85, sz * 0.02); g.lineTo(sz * 1.05, sz * 0.3); g.lineTo(sz * 0.55, sz * 0.25); g.lineTo(sz * 0.6, sz * 0.55);
+                g.quadraticCurveTo(0, sz * 0.6, -sz * 0.5, sz * 0.3); g.closePath(); g.fill(); g.stroke();
+                g.strokeStyle = 'rgba(27,36,51,0.45)'; g.lineWidth = 0.7;
+                g.beginPath(); g.moveTo(-sz * 0.2, -sz * 0.1); g.lineTo(sz * 0.95, -sz * 0.12); g.moveTo(-sz * 0.2, sz * 0.1); g.lineTo(sz * 0.75, sz * 0.22); g.stroke();
+                g.fillStyle = '#a8141e'; g.strokeStyle = '#3a0409'; g.lineWidth = 1;                       // ragged, bloody root
+                g.beginPath(); g.moveTo(-sz * 0.5, -sz * 0.4); g.lineTo(-sz * 0.72, -sz * 0.18); g.lineTo(-sz * 0.55, -sz * 0.02); g.lineTo(-sz * 0.8, sz * 0.16); g.lineTo(-sz * 0.5, sz * 0.36); g.lineTo(-sz * 0.2, sz * 0.2); g.lineTo(-sz * 0.2, -sz * 0.25); g.closePath(); g.fill(); g.stroke();
+                g.strokeStyle = '#3a0409'; g.lineWidth = 2.6; g.beginPath(); g.moveTo(-sz * 0.45, 0); g.lineTo(-sz * 1.0, -sz * 0.06); g.stroke();
+                g.strokeStyle = '#fff6e6'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-sz * 0.45, 0); g.lineTo(-sz * 1.0, -sz * 0.06); g.stroke();
+                g.fillStyle = 'rgba(168,17,26,0.75)'; g.beginPath(); g.ellipse(sz * 0.2, sz * 0.05, sz * 0.3, sz * 0.14, 0.2, 0, BTAU); g.fill();    // blood soaked into the feathers
+            } else if (c.type === 'foot') {
+                // a leg with its three-toed foot, snapped at the knee
+                const col = currentSkin().beakColor || '#f59e0b';
+                const leg = (w, st) => { g.strokeStyle = st; g.lineWidth = w; g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz * 0.35, 0);
+                    g.moveTo(sz * 0.35, 0); g.lineTo(sz * 1.0, -sz * 0.45); g.moveTo(sz * 0.35, 0); g.lineTo(sz * 1.1, 0); g.moveTo(sz * 0.35, 0); g.lineTo(sz * 1.0, sz * 0.45); g.stroke(); };
+                leg(3.4, '#1b2433'); leg(1.9, col);
+                g.fillStyle = '#1b2433';                                                                   // claws
+                [[1.0, -0.45], [1.1, 0], [1.0, 0.45]].forEach(([x, y]) => { g.beginPath(); g.arc(x * sz, y * sz, 0.9, 0, BTAU); g.fill(); });
+                g.fillStyle = '#a8141e'; g.strokeStyle = '#3a0409'; g.lineWidth = 0.9;
+                g.beginPath(); g.ellipse(-sz, 0, sz * 0.28, sz * 0.24, 0, 0, BTAU); g.fill(); g.stroke();
+                g.fillStyle = '#fff6e6'; g.beginPath(); g.arc(-sz * 1.08, 0, sz * 0.11, 0, BTAU); g.fill();
+            } else if (c.type === 'beak') {
+                // half of the beak, cracked off at the root
+                const col = currentSkin().beakColor || '#f59e0b';
+                g.fillStyle = col; g.strokeStyle = '#1b2433'; g.lineWidth = 1.3;
+                g.beginPath(); g.moveTo(-sz * 0.6, -sz * 0.45); g.lineTo(sz * 1.0, 0.05 * sz); g.lineTo(-sz * 0.6, sz * 0.4); g.lineTo(-sz * 0.4, sz * 0.12); g.lineTo(-sz * 0.72, -sz * 0.05); g.closePath(); g.fill(); g.stroke();
+                g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.ellipse(0, -sz * 0.12, sz * 0.4, sz * 0.07, 0.28, 0, BTAU); g.fill();
+                g.fillStyle = '#a8141e'; g.beginPath(); g.ellipse(-sz * 0.55, 0, sz * 0.2, sz * 0.36, 0, 0, BTAU); g.fill();
+            } else if (c.type === 'skull') {
+                // a piece of skull: bone dome with half an eye socket and a crack, wet on the broken side
+                const bg = g.createRadialGradient(-sz * 0.3, -sz * 0.35, sz * 0.1, 0, 0, sz * 1.1);
+                bg.addColorStop(0, '#fffaf0'); bg.addColorStop(1, '#d2c5a8');
+                g.fillStyle = bg; g.strokeStyle = '#3a0409'; g.lineWidth = 1.2;
+                g.beginPath(); g.moveTo(-sz * 0.9, sz * 0.3); g.quadraticCurveTo(-sz * 0.95, -sz * 0.8, 0, -sz * 0.8); g.quadraticCurveTo(sz * 0.85, -sz * 0.75, sz * 0.9, sz * 0.05);
+                g.lineTo(sz * 0.5, sz * 0.4); g.lineTo(sz * 0.3, sz * 0.1); g.lineTo(0, sz * 0.5); g.lineTo(-sz * 0.3, sz * 0.2); g.lineTo(-sz * 0.6, sz * 0.5); g.closePath(); g.fill(); g.stroke();
+                g.fillStyle = '#3a0409'; g.beginPath(); g.ellipse(sz * 0.3, -sz * 0.2, sz * 0.27, sz * 0.23, 0, 0, BTAU); g.fill();
+                g.strokeStyle = 'rgba(58,4,9,0.7)'; g.lineWidth = 0.7; g.beginPath(); g.moveTo(-sz * 0.5, -sz * 0.55); g.lineTo(-sz * 0.25, -sz * 0.2); g.lineTo(-sz * 0.45, 0); g.stroke();
+                g.fillStyle = 'rgba(168,17,26,0.8)'; g.beginPath(); g.ellipse(-sz * 0.1, sz * 0.32, sz * 0.6, sz * 0.14, 0, 0, BTAU); g.fill();
+                g.fillStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); g.ellipse(-sz * 0.4, -sz * 0.45, sz * 0.2, sz * 0.09, -0.6, 0, BTAU); g.fill();
             } else {
                 // meat: irregular chunk, lighter muscle, fibres, a rim of skin, wet highlight
                 g.beginPath();
@@ -2330,18 +2932,18 @@
                         const hitSp = Math.hypot(c.vx, c.vy);
                         if (pushOutOfPipes(c, c.size * 0.5, 0.35)) {
                             c.vr *= 0.6; c.squash = Math.min(1, hitSp * 0.12);
-                            if (c.type !== 'bone' && hitSp > 2.5 && c._hitPipe && Math.random() < 0.7) {
+                            if (!c.hard && hitSp > 2.5 && c._hitPipe && Math.random() < 0.7) {
                                 c.stuck = { pipe: c._hitPipe, side: c._hitSide, t: c.age };
                                 c.slide = 0; splatSound();
                                 for (let k = 0; k < 4; k++) spawnDrop(c.x, c.y, c._hitSide * rand(0.5, 2.5) + (c._hitPipe.vx || 0), rand(-2.5, 0.5), rand(0.8, 2), 1, 1);
                             }
                         }
                     }
-                    if (c.type !== 'bone' && c.age % 2 === 0 && Math.hypot(c.vx, c.vy) > 2.5) {
+                    if (!c.hard && c.age % 2 === 0 && Math.hypot(c.vx, c.vy) > 2.5) {
                         spawnDrop(c.x, c.y, c.vx * 0.15, c.vy * 0.15, rand(0.8, 2), 1, 1);
                     }
                     // fresh tissue keeps seeping for a while after it is torn off
-                    if (c.type !== 'bone' && c.age < 180 && Math.random() < 0.07 * (1 - c.age / 180)) {
+                    if (!c.hard && c.age < 180 && Math.random() < 0.07 * (1 - c.age / 180)) {
                         spawnDrop(c.x, c.y + c.size * 0.3, c.vx * 0.2 + rand(-0.3, 0.3), Math.max(0.3, c.vy * 0.2), rand(0.7, 1.5), 1, 2);
                     }
                     if (boss.active) {
@@ -2402,15 +3004,16 @@
                         bctx.restore();
                         if (Math.abs(c.vy) > 2 && c.bounces < 3) {
                             // soft tissue loses most of its energy and squashes; bone rattles back up harder
-                            const e = c.type === 'bone' ? 0.45 : 0.28;
+                            const e = c.hard ? 0.45 : 0.28;
                             c.squash = Math.min(1, Math.abs(c.vy) * 0.12);
                             c.vy *= -e; c.vx *= 0.6; c.vr *= 0.5; c.bounces++;
                             const n = Math.min(7, 2 + Math.floor(Math.abs(c.vy) * 1.5));
                             for (let k = 0; k < n; k++) spawnDrop(c.x, c.y - 1, rand(-2.5, 2.5) + c.vx * 0.3, rand(-4, -1), rand(0.8, 2), 1, 1);
-                            if (c.type !== 'bone') { splatSound(); growPuddleAt(c.x, 0.6) || addPuddle(c.x, gy + 2, c.size * 1.6); }
+                            if (!c.hard) { splatSound(); addPoolVolume(c.x, c.size * 1.2, 1.4); }
+                            { const P = poolAt(c.x, 0); if (P) { poolRipple(P, c.x, 2); for (let k = 0; k < 3; k++) spawnDrop(c.x + rand(-3, 3), c.y - 2, rand(-2.2, 2.2), rand(-4.5, -2), rand(0.8, 1.6), 2, 1); } }
                         } else if (Math.abs(c.vx) > 0.7) {
                             // skids along the floor, leaving a smear, until friction stops it
-                            c.vy = 0; c.vx *= c.type === 'bone' ? 0.9 : 0.84; c.vr = c.vx * 0.06;
+                            c.vy = 0; c.vx *= c.hard ? 0.9 : 0.84; c.vr = c.vx * 0.06;
                         } else {
                             bakeChunk(c);
                             growPuddleAt(c.x, 1.2);
@@ -2418,7 +3021,7 @@
                         }
                     } else if (c.x < -40 || c.x > state.width + 40) keep = false;
                 }
-                if (keep) chunks[j++] = c;
+                if (keep) chunks[j++] = c; else c.gone = true;
             }
             chunks.length = j;
             updateRopes();
@@ -2457,6 +3060,7 @@
         function bakeFeather(c) { paintFeather(gctx, c, true); }
 
         function drawChunks() {
+            drawStrands();
             for (const c of chunks) {
                 if (c.type === 'feather') {
                     paintFeather(ctx, c, false);
@@ -2501,6 +3105,8 @@
         }
 
         function updatePuddles() {
+            for (let i = wetSpots.length - 1; i >= 0; i--) if (++wetSpots[i].age > 420) wetSpots.splice(i, 1);
+            updateStrands(); updateLensBlood(); updatePools();
             for (const pu of puddles) {
                 pu.age++;
                 const growing = pu.r < pu.maxR - 0.05;
@@ -2512,12 +3118,25 @@
                 bctx.save();
                 bctx.globalCompositeOperation = 'source-atop';
                 bctx.fillStyle = 'rgba(60,0,4,0.05)';
-                bctx.fillRect(0, 0, state.width, state.height);
+                fillBand(bctx, BL);
                 bctx.restore();
             }
         }
 
         function drawPuddleGloss() {
+            // fresh blood is wet: a soft highlight and a small glint on each new splat, fading as it dries
+            if (wetSpots.length) {
+                ctx.save(); ctx.fillStyle = '#ffffff';
+                for (const w of wetSpots) {
+                    const a = 1 - w.age / 420;
+                    if (a <= 0) continue;
+                    ctx.globalAlpha = 0.34 * a;
+                    ctx.beginPath(); ctx.ellipse(w.x - w.rx * 0.25, w.y - w.ry * 0.3, w.rx * 0.42, Math.max(0.5, w.ry * 0.28), 0, 0, BTAU); ctx.fill();
+                    ctx.globalAlpha = 0.75 * a * (0.6 + 0.4 * Math.sin(state.frameCount * 0.07 + w.ph));
+                    ctx.beginPath(); ctx.arc(w.x - w.rx * 0.42, w.y - w.ry * 0.25, 0.75, 0, BTAU); ctx.fill();
+                }
+                ctx.restore();
+            }
             for (const pu of puddles) {
                 if (pu.age > 500) continue;
                 ctx.save();
@@ -3241,7 +3860,9 @@
                 if (nightAlpha > 0.5) {
                     ctx.save();
                     ctx.globalAlpha = (nightAlpha - 0.5) * 2;
-                    ctx.shadowColor = '#e2e8f0'; ctx.shadowBlur = 25;
+                    const mg = ctx.createRadialGradient(state.width * 0.78, 90, 18, state.width * 0.78, 90, 50);
+                    mg.addColorStop(0, 'rgba(226,232,240,0.55)'); mg.addColorStop(1, 'rgba(226,232,240,0)');
+                    ctx.fillStyle = mg; ctx.fillRect(state.width * 0.78 - 50, 40, 100, 100);
                     ctx.fillStyle = '#f1f5f9';
                     ctx.beginPath(); ctx.arc(state.width * 0.78, 90, 22, 0, Math.PI * 2); ctx.fill();
                     ctx.restore();
@@ -4600,6 +5221,7 @@
         }
 
         function finishBossDeath() {
+            state.invuln = Math.max(state.invuln, 120);
             const d = boss.die;
             boss.state = 'DEFEATED';
             boss.timer = 170;
@@ -4782,38 +5404,89 @@
             ctx.beginPath(); ctx.roundRect(-13.5, -7, 27, 6, 3); ctx.fill(); ctx.stroke();
         }
 
-        // rubber-hose sleeve from a shoulder above the screen down to the wrist, getting wider as it comes toward the camera
+        // A real arm in a suit sleeve: a jacket shoulder pokes in at the top edge, the upper arm runs to an
+        // elbow that bends (2-bone IK, with a bit of cartoon stretch), and the forearm widens toward the camera.
+        // Once he's down, the arm goes limp: the elbow drops and the forearm lies on the floor behind the hand.
+        const MITT_SUIT = '#232c40', MITT_SUIT_DK = '#161c2b';
         function drawMittArm(d, sq) {
             const S = MITT_S * d.scale, sx = sq ? sq[0] : 1, sy = sq ? sq[1] : 1;
-            const c = Math.cos(d.rot), sn = Math.sin(d.rot);
+            const c = Math.cos(d.rot), sn = Math.sin(d.rot), gy = groundY();
             const toW = (lx, ly) => [d.x + (lx * S * sx) * c - ((ly - 22) * S * sy) * sn, d.y + (lx * S * sx) * sn + ((ly - 22) * S * sy) * c];
-            const P3 = toW(0, -5);
+            const Wr = toW(0, -5);                                   // wrist
             const up = [sn, -c];                                     // away from the fingers
-            const reach = 70 * Math.sqrt(d.scale);
-            const P2 = [P3[0] + up[0] * reach, P3[1] + up[1] * reach];
-            const P0 = [d.ax, -90], P1 = [d.ax, -90 + (Math.max(P3[1], 0) + 90) * 0.45];
-            const w0 = 40, w1 = 24 * S;
-            const N = 28, L = [], R = [];
-            const bez = (t, i) => (1 - t) ** 3 * P0[i] + 3 * (1 - t) ** 2 * t * P1[i] + 3 * (1 - t) * t * t * P2[i] + t ** 3 * P3[i];
-            for (let k = 0; k <= N; k++) {
-                const t = k / N, x = bez(t, 0), y = bez(t, 1);
-                const t2 = Math.min(1, t + 0.01), t1 = Math.max(0, t - 0.01);
-                let tx = bez(t2, 0) - bez(t1, 0), ty = bez(t2, 1) - bez(t1, 1);
-                const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
-                const w = (w0 + (w1 - w0) * t) / 2;
-                L.push([x - ty * w, y + tx * w]); R.push([x + ty * w, y - tx * w]);
+            const SH = [d.ax, -46];                                  // the arm comes in from above the screen (no shoulder shown)
+            // --- elbow ---
+            let dx = Wr[0] - SH[0], dy = Wr[1] - SH[1];
+            const dist = Math.hypot(dx, dy) || 1;
+            const L = Math.max(dist * 1.1, 250);                     // cartoon arm: stretches, but always keeps some slack to bend
+            const h = Math.sqrt(Math.max(0, L * L / 4 - dist * dist / 4));
+            const want = dx >= 0 ? 1 : -1;                           // elbow points outward, away from where the hand went
+            d.bs = d.bs === undefined ? want : d.bs + (want - d.bs) * 0.08;
+            let E = [SH[0] + dx / 2 + (-dy / dist) * h * d.bs, SH[1] + dy / 2 + (dx / dist) * h * d.bs];
+            const limp = d.phase === 'fall' ? clamp(d.pt / 45, 0, 1) : (d.phase === 'rest' || d.phase === 'done' || boss.state === 'DEFEATED') ? 1 : 0;
+            if (limp > 0) {
+                const fl = 120;                                      // forearm lying on the floor behind the hand
+                const Ef = [clamp(Wr[0] + up[0] * fl, 30, state.width - 30), Math.min(gy - 15, Wr[1] + up[1] * fl + 30)];
+                E = [E[0] + (Ef[0] - E[0]) * limp, E[1] + (Ef[1] - E[1]) * limp];
             }
+            // --- centre line: shoulder -> elbow -> wrist, as two smooth curves ---
+            const nrm = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+            const lenA = Math.hypot(E[0] - SH[0], E[1] - SH[1]), lenB = Math.hypot(Wr[0] - E[0], Wr[1] - E[1]);
+            const tS = nrm(E[0] - SH[0], E[1] - SH[1] + lenA * 0.35), tE = nrm(Wr[0] - SH[0], Wr[1] - SH[1]);
+            const A = [SH, [SH[0] + tS[0] * lenA * 0.33, SH[1] + tS[1] * lenA * 0.33], [E[0] - tE[0] * lenA * 0.28, E[1] - tE[1] * lenA * 0.28], E];
+            const reach = Math.min(70 * Math.sqrt(d.scale), lenB * 0.5);
+            const B = [E, [E[0] + tE[0] * lenB * 0.28, E[1] + tE[1] * lenB * 0.28], [Wr[0] + up[0] * reach, Wr[1] + up[1] * reach], Wr];
+            const bez = (P, t, i) => (1 - t) ** 3 * P[0][i] + 3 * (1 - t) ** 2 * t * P[1][i] + 3 * (1 - t) * t * t * P[2][i] + t ** 3 * P[3][i];
+            const wS = 50, wE = 37 * Math.sqrt(d.scale), wW = 25 * S;
+            const N = 14, Lp = [], Rp = [], Cp = [];
+            const add = (P, k, w) => {
+                const t = k / N, x = bez(P, t, 0), y = bez(P, t, 1);
+                const t2 = Math.min(1, t + 0.02), t1 = Math.max(0, t - 0.02);
+                const tg = nrm(bez(P, t2, 0) - bez(P, t1, 0), bez(P, t2, 1) - bez(P, t1, 1));
+                Lp.push([x - tg[1] * w / 2, y + tg[0] * w / 2]); Rp.push([x + tg[1] * w / 2, y - tg[0] * w / 2]); Cp.push([x, y, tg[0], tg[1], w]);
+            };
+            for (let k = 0; k <= N; k++) add(A, k, wS + (wE - wS) * (k / N) + Math.sin(k / N * Math.PI) * 5);      // upper arm: a little muscle bulge
+            for (let k = 1; k <= N; k++) add(B, k, wE + (wW - wE) * (k / N));
             ctx.save();
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            // --- sleeve ---
+            const body = () => {
+                ctx.beginPath();
+                Lp.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+                for (let i = Rp.length - 1; i >= 0; i--) ctx.lineTo(Rp[i][0], Rp[i][1]);
+                ctx.closePath();
+            };
+            body(); ctx.fillStyle = MITT_SUIT; ctx.fill();
+            ctx.save(); body(); ctx.clip();
+            // shaded underside + cloth sheen
+            ctx.strokeStyle = MITT_SUIT_DK; ctx.lineWidth = wE * 0.45;
+            ctx.beginPath(); Rp.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = Math.max(3, wW * 0.12);
             ctx.beginPath();
-            L.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-            for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
-            ctx.closePath();
-            ctx.fillStyle = '#10141c'; ctx.fill();
-            ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
-            ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = Math.max(3, w1 * 0.12); ctx.lineCap = 'round';   // sheen down one side
-            ctx.beginPath();
-            for (let k = 0; k <= N; k++) { const m = [L[k][0] * 0.7 + R[k][0] * 0.3, L[k][1] * 0.7 + R[k][1] * 0.3]; k ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]); }
+            for (let k = 0; k < Lp.length; k++) { const m = [Lp[k][0] * 0.72 + Rp[k][0] * 0.28, Lp[k][1] * 0.72 + Rp[k][1] * 0.28]; k ? ctx.lineTo(m[0], m[1]) : ctx.moveTo(m[0], m[1]); }
             ctx.stroke();
+            ctx.restore();
+            body(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+            // elbow: a sewn patch on the outside of the bend and creases on the inside
+            const e = Cp[N], out = d.bs >= 0 ? 1 : -1;
+            const ex = e[0] + e[3] * e[4] * 0.2 * out, ey = e[1] - e[2] * e[4] * 0.2 * out;
+            ctx.save(); ctx.translate(ex, ey); ctx.rotate(Math.atan2(e[3], e[2]));
+            ctx.fillStyle = '#4a556b'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(0, 0, e[4] * 0.36, e[4] * 0.24, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.ellipse(0, 0, e[4] * 0.27, e[4] * 0.15, 0, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(10,14,22,0.8)'; ctx.lineWidth = 2;
+            for (const q of [-1, 1]) {
+                const cq = Cp[N + q * 2], side = out > 0 ? Lp[N + q * 2] : Rp[N + q * 2];
+                ctx.beginPath(); ctx.moveTo(side[0], side[1]); ctx.lineTo(side[0] + (cq[0] - side[0]) * 0.55, side[1] + (cq[1] - side[1]) * 0.55); ctx.stroke();
+            }
+            // two sleeve buttons near the wrist
+            ctx.fillStyle = '#c9a23a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.4;
+            for (const k of [Cp.length - 3, Cp.length - 5]) {
+                const q = Cp[k], bx2 = q[0] - q[3] * q[4] * 0.3, by2 = q[1] + q[2] * q[4] * 0.3;
+                ctx.beginPath(); ctx.arc(bx2, by2, Math.max(2.2, q[4] * 0.075), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
             ctx.restore();
         }
 
@@ -4897,6 +5570,8 @@
         }
 
         function endBossFight() {
+            state.winSafe = 180;
+            state.invuln = Math.max(state.invuln, 180);
             if (boss.kind === 'glove' && boss.die && boss.die.x !== undefined) {    // the resting glove poofs away
                 dustCloud(boss.die.x, boss.die.y, 10, ['#ffffff', '#e9edf3', '#d3d9e2']);
                 cartoonStars(boss.die.x, boss.die.y, 6, 4);
@@ -4939,7 +5614,7 @@
             dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
             slamWarner.active = false; slamWarner.locked = false;
             state.bossIncoming = false; state.bossDefeatedThisRun = false; state.bossAnnounced = false;
-            move.left = move.right = false;
+            releaseMoves();
             syncMoveButtons();
         }
 
@@ -4954,7 +5629,11 @@
         }
         function updateBirdMovement() {
             if (bossControlsOn()) {
-                const dir = (move.right ? 1 : 0) - (move.left ? 1 : 0);
+                const L = move.left || move.tapL > 0, R = move.right || move.tapR > 0;
+                if (move.tapL > 0) move.tapL--;
+                if (move.tapR > 0) move.tapR--;
+                // both held (e.g. thumb still on the old arrow while pressing the new one): the newest press wins
+                const dir = L && R ? (move.last === 'left' ? -1 : 1) : (R ? 1 : 0) - (L ? 1 : 0);
                 bird.x = clamp(bird.x + dir * BOSS_MOVE_SPEED, 22, state.width - 22);
             } else if (state.status === 'PLAYING') {
                 bird.x += (birdHomeX() - bird.x) * 0.06;   // glide back to the usual spot afterwards
@@ -4967,8 +5646,7 @@
             _controlsShown = on;
             document.body.classList.toggle('boss-on', on);
             if (!on) {
-                move.left = move.right = false;
-                document.querySelectorAll('.move-btn').forEach(b => b.classList.remove('pressed'));
+                releaseMoves();
             }
         }
 
@@ -5627,7 +6305,7 @@
         }
 
         function drawMittSleeve(len) {
-            ctx.fillStyle = '#10141c'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
+            ctx.fillStyle = MITT_SUIT; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
             ctx.beginPath();
             ctx.moveTo(-12, -len); ctx.lineTo(12, -len); ctx.lineTo(13, 3); ctx.quadraticCurveTo(0, 8, -13, 3); ctx.closePath();
             ctx.fill(); ctx.stroke();
@@ -6078,6 +6756,40 @@
         }
 
         // ---------- drawing ----------
+        // tiled reptile scales (built once): overlapping little "U" shapes, one row offset from the next
+        let _dinoScalePat = null;
+        function dinoScales() {
+            if (_dinoScalePat) return _dinoScalePat;
+            const c = document.createElement('canvas'); c.width = 18; c.height = 14;
+            const g = c.getContext('2d');
+            g.lineWidth = 1.2; g.lineCap = 'round';
+            const u = (x, y) => {
+                g.strokeStyle = 'rgba(18,70,38,0.30)'; g.beginPath(); g.arc(x, y, 4.2, 0.15, Math.PI - 0.15); g.stroke();
+                g.strokeStyle = 'rgba(225,255,190,0.16)'; g.beginPath(); g.arc(x, y + 1.6, 4.2, Math.PI + 0.5, -0.5); g.stroke();
+            };
+            u(4.5, 1); u(13.5, 1); u(0, 8); u(9, 8); u(18, 8); u(4.5, 15); u(13.5, 15);
+            _dinoScalePat = ctx.createPattern(c, 'repeat');
+            return _dinoScalePat;
+        }
+        // churned-up earth where he burst out of the ground
+        function drawDinoRubble(G, S) {
+            ctx.lineJoin = 'round';
+            for (let k = 0; k < 10; k++) {
+                const r = (8 + (k * 37 % 7)) * S;
+                const x = G.cx - 100 * S + k * 22 * S + Math.sin(k * 2.3) * 5 * S, y = G.gy + 3 - r * 0.3;
+                if (k % 3 === 0) {                                     // torn grass still stuck to a clod
+                    ctx.fillStyle = '#5fc34a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.6;
+                    ctx.beginPath(); ctx.moveTo(x - 4 * S, y - r * 0.5); ctx.lineTo(x - 1 * S, y - r * 1.25); ctx.lineTo(x + 1 * S, y - r * 0.6); ctx.lineTo(x + 4 * S, y - r * 1.1); ctx.lineTo(x + 5 * S, y - r * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke();
+                }
+                ctx.fillStyle = k % 2 ? '#8b5a2b' : '#7a4c24'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
+                ctx.beginPath(); ctx.ellipse(x, y, r * 1.15, r * 0.78, Math.sin(k) * 0.3, 0, 6.283); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = 'rgba(210,160,100,0.55)';
+                ctx.beginPath(); ctx.ellipse(x - r * 0.3, y - r * 0.3, r * 0.4, r * 0.2, -0.4, 0, 6.283); ctx.fill();
+                ctx.fillStyle = 'rgba(60,35,15,0.5)';
+                ctx.beginPath(); ctx.arc(x + r * 0.35, y + r * 0.1, r * 0.13, 0, 6.283); ctx.fill();
+            }
+        }
+
         function drawDinoArm(x, y, a1, a2, S, back) {
             const L1 = 15 * S, L2 = 13 * S;
             const ex = x - Math.cos(a1) * L1, ey = y + Math.sin(a1) * L1;
@@ -6085,6 +6797,8 @@
             const seg = (x0, y0, x1, y1, w) => {
                 ctx.strokeStyle = INK; ctx.lineWidth = w + 4 * S; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
                 ctx.strokeStyle = back ? DINO_COL.dark : DINO_COL.body; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+                ctx.strokeStyle = 'rgba(20,45,45,0.28)'; ctx.lineWidth = w * 0.4; ctx.beginPath(); ctx.moveTo(x0, y0 + w * 0.28); ctx.lineTo(x1, y1 + w * 0.28); ctx.stroke();   // shaded underside
+                if (!back) { ctx.strokeStyle = 'rgba(255,255,220,0.3)'; ctx.lineWidth = w * 0.22; ctx.beginPath(); ctx.moveTo(x0, y0 - w * 0.24); ctx.lineTo(x1, y1 - w * 0.24); ctx.stroke(); }
             };
             ctx.lineCap = 'round';
             seg(x, y, ex, ey, 9 * S); seg(ex, ey, hx, hy, 8 * S);
@@ -6139,11 +6853,19 @@
             // mouth interior
             if (jaw > 0.05) {
                 const tip = rotP(-100, 2);
-                ctx.fillStyle = '#5a1220';
+                const mg = ctx.createRadialGradient(hingeX - 8, hingeY + 4, 3, hingeX - 8, hingeY + 4, 95);   // dark throat, redder toward the lips
+                mg.addColorStop(0, '#1d0408'); mg.addColorStop(0.45, '#5a1220'); mg.addColorStop(1, '#8a2236');
+                ctx.fillStyle = mg;
                 ctx.beginPath(); ctx.moveTo(hingeX, hingeY); ctx.lineTo(-76, 10); ctx.lineTo(tip[0], tip[1]); ctx.closePath(); ctx.fill();
                 const tg = rotP(-48, 0);
+                const tcx = tg[0] / 2 - 10, tcy = (tg[1] + 10) / 2 + 2;
                 ctx.fillStyle = '#e86a8a';
-                ctx.beginPath(); ctx.ellipse(tg[0] / 2 - 10, (tg[1] + 10) / 2 + 2, 22, 7 + jaw * 4, ja * 0.5, 0, 6.283); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(tcx, tcy, 22, 7 + jaw * 4, ja * 0.5, 0, 6.283); ctx.fill();
+                ctx.save(); ctx.translate(tcx, tcy); ctx.rotate(ja * 0.5);
+                ctx.fillStyle = 'rgba(120,20,50,0.35)'; ctx.beginPath(); ctx.ellipse(4, 2 + jaw * 2, 20, 4 + jaw * 2, 0, 0, Math.PI); ctx.fill();      // underside shadow
+                ctx.strokeStyle = 'rgba(120,20,50,0.6)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-18, 0); ctx.quadraticCurveTo(0, 2, 16, 0); ctx.stroke();   // centre groove
+                ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(-8, -2.5 - jaw, 7, 1.6, 0, 0, 6.283); ctx.fill();               // wet shine
+                ctx.restore();
             }
             // lower jaw
             ctx.save(); ctx.translate(hingeX, hingeY); ctx.rotate(ja);
@@ -6152,10 +6874,20 @@
             ctx.fillStyle = skin; ctx.fill(lowJaw);
             ctx.save(); ctx.clip(lowJaw);
             ctx.fillStyle = DINO_COL.belly; ctx.beginPath(); ctx.moveTo(-110, 12); ctx.quadraticCurveTo(-50, 24, 10, 20); ctx.lineTo(10, 40); ctx.lineTo(-110, 40); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(120,140,70,0.55)'; ctx.lineWidth = 1.3;                              // chin scutes
+            for (let x = -92; x <= -4; x += 12) { ctx.beginPath(); ctx.moveTo(x, 12); ctx.lineTo(x + 3, 27); ctx.stroke(); }
+            ctx.fillStyle = '#c94a66'; ctx.beginPath(); ctx.moveTo(-2, -4.5); ctx.lineTo(-101, 1.5); ctx.lineTo(-101, 6.5); ctx.lineTo(-2, 1.5); ctx.closePath(); ctx.fill();   // gums
+            ctx.fillStyle = 'rgba(20,45,45,0.25)'; ctx.beginPath(); ctx.ellipse(-6, 10, 18, 14, 0, 0, 6.283); ctx.fill();       // shadow under the jaw hinge
+            ctx.strokeStyle = 'rgba(20,45,45,0.28)'; ctx.lineWidth = 9; ctx.stroke(lowJaw);                 // soft inner edge
             ctx.restore();
             ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(lowJaw);
-            ctx.fillStyle = '#ffffff'; ctx.lineWidth = 1.5;
-            for (let x = -94; x <= -22; x += 13) { ctx.beginPath(); ctx.moveTo(x, 2); ctx.lineTo(x + 5, -7); ctx.lineTo(x + 10, 2); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+            {
+                const tgr = ctx.createLinearGradient(0, 2, 0, -12);
+                tgr.addColorStop(0, '#f0deb0'); tgr.addColorStop(0.6, '#ffffff');
+                ctx.fillStyle = tgr; ctx.lineWidth = 1.5;
+                const hs = [9, 6, 11, 7, 8, 6];
+                hs.forEach((h, i) => { const x = -95 + i * 13; ctx.beginPath(); ctx.moveTo(x, 2.4); ctx.quadraticCurveTo(x + 3, -h * 0.6, x + 6.5, -h); ctx.quadraticCurveTo(x + 8, -h * 0.4, x + 10, 2); ctx.closePath(); ctx.fill(); ctx.stroke(); });
+            }
             ctx.restore();
             // skull (path kept so the outline goes around the skull, not around the last spot drawn)
             const skull = new Path2D();
@@ -6163,18 +6895,55 @@
             skull.quadraticCurveTo(-92, 4, -78, 10); skull.lineTo(38, 12); skull.quadraticCurveTo(58, 15, 60, 8); skull.closePath();
             ctx.fillStyle = skin; ctx.fill(skull);
             ctx.save(); ctx.clip(skull);
-            ctx.fillStyle = choking ? '#7a74c4' : DINO_COL.spot;
-            [[34, -30, 6], [48, -12, 4.5], [-34, -34, 4]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill(); });
-            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.ellipse(-36, -40, 26, 6, -0.18, 0, 6.283); ctx.fill();
+            {
+                // light from the upper left; the back of the skull and the underside fall into shadow
+                const hg = ctx.createLinearGradient(-50, -56, 30, 16);
+                hg.addColorStop(0, 'rgba(255,255,210,0.38)'); hg.addColorStop(0.45, 'rgba(255,255,210,0)'); hg.addColorStop(1, 'rgba(15,45,45,0.5)');
+                ctx.fillStyle = hg; ctx.fillRect(-96, -60, 172, 80);
+                // dark stripes over the back of the skull
+                ctx.fillStyle = choking ? '#6f69b8' : 'rgba(40,112,46,0.85)';
+                [[16, -56, 9, 17, -0.2], [33, -51, 10, 21, 0.1], [49, -40, 9, 19, 0.45]].forEach(([x, y, w, len, lean]) => {
+                    ctx.beginPath(); ctx.moveTo(x - w / 2, y);
+                    ctx.quadraticCurveTo(x - w * 0.2 + lean * len * 0.5, y + len * 0.6, x + lean * len, y + len);
+                    ctx.quadraticCurveTo(x + w * 0.5 + lean * len * 0.5, y + len * 0.5, x + w / 2, y); ctx.closePath(); ctx.fill();
+                });
+                ctx.fillStyle = 'rgba(15,45,45,0.26)'; ctx.beginPath(); ctx.ellipse(42, -4, 17, 14, 0, 0, 6.283); ctx.fill();      // jaw muscle
+                ctx.fillStyle = 'rgba(15,45,45,0.36)'; ctx.beginPath(); ctx.ellipse(10, -23, 19, 17, 0, 0, 6.283); ctx.fill();    // eye socket
+                ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(45, -22, 2.2, 3.6, 0.2, 0, 6.283); ctx.fill();                  // ear hole
+                // gums along the mouth, with a lip line above them
+                ctx.fillStyle = '#c94a66'; ctx.beginPath(); ctx.moveTo(-84, 5.5); ctx.lineTo(37, 7); ctx.lineTo(37, 14); ctx.lineTo(-84, 14); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = 'rgba(27,36,51,0.6)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-87, 4.5); ctx.quadraticCurveTo(-20, 3.5, 38, 6.5); ctx.stroke();
+                ctx.strokeStyle = 'rgba(15,45,45,0.28)'; ctx.lineWidth = 10; ctx.stroke(skull);                                   // soft inner edge
+                ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.ellipse(-36, -41, 26, 5, -0.2, 0, 6.283); ctx.fill();
+            }
             ctx.restore();
             ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(skull);
-            // upper teeth
-            ctx.fillStyle = '#ffffff'; ctx.lineWidth = 1.5;
-            for (let x = -76; x <= 22; x += 12) { ctx.beginPath(); ctx.moveTo(x, 9); ctx.lineTo(x + 5, 18); ctx.lineTo(x + 10, 9); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-            // nostrils
+            // upper teeth: uneven, slightly hooked, cream at the root
+            {
+                const tgr = ctx.createLinearGradient(0, 9, 0, 22);
+                tgr.addColorStop(0, '#f0deb0'); tgr.addColorStop(0.55, '#ffffff');
+                ctx.fillStyle = tgr; ctx.lineWidth = 1.5;
+                const hs = [10, 7, 12, 8, 9, 6, 10, 7, 8];
+                hs.forEach((h, i) => { const x = -77 + i * 11.6; ctx.beginPath(); ctx.moveTo(x, 9); ctx.quadraticCurveTo(x + 1, 9 + h * 0.5, x + 3.5, 9 + h); ctx.quadraticCurveTo(x + 7, 9 + h * 0.6, x + 9.6, 9); ctx.closePath(); ctx.fill(); ctx.stroke(); });
+            }
+            // drool strings stretching between the jaws when the mouth is wide open
+            if (jaw > 0.45 && !dead) {
+                ctx.strokeStyle = 'rgba(235,248,255,0.75)'; ctx.lineWidth = 1.4;
+                [[-44, -58], [-6, -30]].forEach(([ux, lx]) => { const lp = rotP(lx - hingeX, -3); ctx.beginPath(); ctx.moveTo(ux, 17); ctx.quadraticCurveTo((ux + lp[0]) / 2 + 5, (17 + lp[1]) / 2 + 3, lp[0], lp[1]); ctx.stroke(); });
+            }
+            // nostrils (with a rim), an old scar across the snout, and creases under the eye
             ctx.fillStyle = INK;
             ctx.beginPath(); ctx.ellipse(-80, -18, 3.2, 2, -0.3, 0, 6.283); ctx.fill();
             ctx.beginPath(); ctx.ellipse(-68, -23, 2.6, 1.7, -0.3, 0, 6.283); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,215,0.5)'; ctx.lineWidth = 1.3;
+            ctx.beginPath(); ctx.ellipse(-80, -18.5, 5, 3.4, -0.3, Math.PI, 0); ctx.stroke();
+            ctx.strokeStyle = 'rgba(27,36,51,0.55)'; ctx.lineWidth = 1.7;
+            ctx.beginPath(); ctx.moveTo(-58, -22); ctx.lineTo(-40, -13);
+            [[-54, -20], [-49, -17.5], [-44, -15]].forEach(([x, y]) => { ctx.moveTo(x + 2, y - 4); ctx.lineTo(x - 2, y + 4); });
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(27,36,51,0.4)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(10, -23, 17.5, 0.45, 1.5); ctx.stroke();
+            ctx.beginPath(); ctx.arc(10, -23, 21, 0.7, 1.35); ctx.stroke();
             // eye
             const ex = 10, ey = -24, er = choking ? 17 : 13;
             ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
@@ -6189,6 +6958,8 @@
                 ctx.beginPath(); ctx.arc(px, py, 6.5, 0, 6.283); ctx.fill();
                 ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(px, py, 2.2, 5, 0, 0, 6.283); ctx.fill();
                 ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px - 2, py - 3, 1.6, 0, 6.283); ctx.fill();
+                ctx.strokeStyle = 'rgba(120,60,10,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(px, py, 6.5, 0, 6.283); ctx.stroke();     // iris rim
+                ctx.fillStyle = 'rgba(27,36,51,0.2)'; ctx.beginPath(); ctx.ellipse(ex, ey - 1, er - 1.5, er - 2.5, 0, Math.PI, 0); ctx.fill(); // shadow of the brow on the eyeball
                 if (coughing) {                                     // watery, half-closed eye
                     ctx.fillStyle = skin; ctx.beginPath(); ctx.ellipse(ex, ey - 3, 14, 10, 0, Math.PI, 0); ctx.fill();
                     ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(ex - 13, ey - 3); ctx.lineTo(ex + 13, ey - 3); ctx.stroke();
@@ -6254,6 +7025,10 @@
             ctx.beginPath(); ctx.rect(-200, -600, (G.cx + 600), G.gy + 2 + 600); ctx.clip();    // the rest of him is underground
             ctx.lineJoin = 'round'; ctx.lineCap = 'round';
             const tL = G.top + by, cx = G.cx;
+            // the curve of his back (shared by the plates, the stripes and the highlight)
+            const bkP = [[cx - 36 * S - ln, tL - 2 * S], [cx + 18 * S - ln * 0.5, tL - 16 * S], [cx + 82 * S, tL + 34 * S], [cx + 92 * S, G.gy + 12]];
+            const bk = (t, i) => (1 - t) ** 3 * bkP[0][i] + 3 * (1 - t) ** 2 * t * bkP[1][i] + 3 * (1 - t) * t * t * bkP[2][i] + t ** 3 * bkP[3][i];
+            const bkT = t => { const x = bk(t + 0.01, 0) - bk(t - 0.01, 0), y = bk(t + 0.01, 1) - bk(t - 0.01, 1), l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
             // back plates: sit on the torso's back curve, standing out along its normal, smaller toward the tail
             {
                 const P0 = [cx - 36 * S - ln, tL - 2 * S], P1 = [cx + 18 * S - ln * 0.5, tL - 16 * S], P2 = [cx + 82 * S, tL + 34 * S], P3 = [cx + 92 * S, G.gy + 12];
@@ -6271,6 +7046,12 @@
                     ctx.lineTo(x + nx * h + tx * 2 * S, y + ny * h + ty * 2 * S);
                     ctx.lineTo(x + tx * w - nx * 3 * S, y + ty * w - ny * 3 * S);
                     ctx.closePath(); ctx.fill(); ctx.stroke();
+                    // lit front edge and a ridge down the middle of each plate
+                    ctx.strokeStyle = 'rgba(190,240,150,0.5)'; ctx.lineWidth = 1.8 * S;
+                    ctx.beginPath(); ctx.moveTo(x - tx * w * 0.6 + nx * 1 * S, y - ty * w * 0.6 + ny * 1 * S); ctx.lineTo(x + nx * h * 0.82 + tx * 1 * S, y + ny * h * 0.82 + ty * 1 * S); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(15,45,45,0.45)'; ctx.lineWidth = 1.4 * S;
+                    ctx.beginPath(); ctx.moveTo(x + tx * w * 0.2, y + ty * w * 0.2); ctx.lineTo(x + nx * h * 0.7 + tx * 2 * S, y + ny * h * 0.7 + ty * 2 * S); ctx.stroke();
+                    ctx.strokeStyle = INK; ctx.lineWidth = 3;
                 }
             }
             // arm poses
@@ -6295,17 +7076,69 @@
             torso.closePath();
             ctx.fillStyle = DINO_COL.body; ctx.fill(torso);
             ctx.save(); ctx.clip(torso);
-            ctx.fillStyle = DINO_COL.belly; ctx.beginPath(); ctx.ellipse(cx - 54 * S - ln * 0.7, tL + 104 * S, 30 * S, 82 * S, -0.12, 0, 6.283); ctx.fill();
-            ctx.strokeStyle = 'rgba(63,143,52,0.45)'; ctx.lineWidth = 2;
-            for (let k = 0; k < 5; k++) { const yy = tL + 54 * S + k * 19 * S; ctx.beginPath(); ctx.moveTo(cx - 80 * S - ln * 0.6, yy); ctx.quadraticCurveTo(cx - 54 * S - ln * 0.6, yy + 5 * S, cx - 26 * S - ln * 0.6, yy); ctx.stroke(); }
-            ctx.fillStyle = DINO_COL.spot;
-            [[24, 40, 9], [50, 72, 7], [14, 96, 6], [62, 112, 8]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(cx + x * S - ln * 0.3, tL + y * S, r * S, 0, 6.283); ctx.fill(); });
+            {
+                // light from the upper left; his back and everything near the ground fall into shadow
+                const tg = ctx.createLinearGradient(cx - 90 * S, tL, cx + 70 * S, G.gy);
+                tg.addColorStop(0, 'rgba(255,255,210,0.34)'); tg.addColorStop(0.4, 'rgba(255,255,210,0)'); tg.addColorStop(1, 'rgba(15,45,45,0.55)');
+                ctx.fillStyle = tg; ctx.fillRect(cx - 140 * S, tL - 40 * S, 300 * S, 260 * S);
+                // dark stripes running down from the spine
+                ctx.fillStyle = 'rgba(40,112,46,0.85)';
+                for (let k = 0; k < 6; k++) {
+                    const t = 0.06 + k * 0.115, x = bk(t, 0), y = bk(t, 1), [tx, ty] = bkT(t);
+                    const nx = -ty, ny = tx;                              // into the body
+                    const len = (50 - k * 4) * S, w = (9.5 - k * 0.6) * S;
+                    ctx.beginPath(); ctx.moveTo(x - tx * w, y - ty * w);
+                    ctx.quadraticCurveTo(x + nx * len * 0.55 - tx * w * 0.9, y + ny * len * 0.55 - ty * w * 0.9, x + nx * len - tx * w * 1.6, y + ny * len - ty * w * 1.6);
+                    ctx.quadraticCurveTo(x + nx * len * 0.5 + tx * w * 0.3, y + ny * len * 0.5 + ty * w * 0.3, x + tx * w, y + ty * w);
+                    ctx.closePath(); ctx.fill();
+                }
+                // pale belly with overlapping scutes
+                const bx0 = cx - 54 * S - ln * 0.7;
+                ctx.fillStyle = DINO_COL.belly; ctx.beginPath(); ctx.ellipse(bx0, tL + 104 * S, 30 * S, 82 * S, -0.12, 0, 6.283); ctx.fill();
+                ctx.strokeStyle = 'rgba(120,140,70,0.6)'; ctx.lineWidth = 2.5 * S; ctx.beginPath(); ctx.ellipse(bx0, tL + 104 * S, 30 * S, 82 * S, -0.12, -1.3, 1.5); ctx.stroke();
+                for (let k = 0; k < 6; k++) {
+                    const yy = tL + 42 * S + k * 18 * S, lx = cx - 84 * S - ln * 0.6, rx = cx - 24 * S - ln * 0.6;
+                    ctx.strokeStyle = 'rgba(95,120,60,0.6)'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(lx, yy); ctx.quadraticCurveTo((lx + rx) / 2, yy + 6 * S, rx, yy); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(255,255,235,0.5)'; ctx.lineWidth = 1.4;
+                    ctx.beginPath(); ctx.moveTo(lx, yy + 2.5 * S); ctx.quadraticCurveTo((lx + rx) / 2, yy + 8.5 * S, rx, yy + 2.5 * S); ctx.stroke();
+                }
+                // shoulder and chest muscle
+                ctx.strokeStyle = 'rgba(15,45,45,0.4)'; ctx.lineWidth = 3 * S;
+                ctx.beginPath(); ctx.arc(G.shoulderX - ln + 8 * S, G.shoulderY + by + 2 * S, 22 * S, -1.9, 0.9); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,255,210,0.28)'; ctx.lineWidth = 2.4 * S;
+                ctx.beginPath(); ctx.arc(G.shoulderX - ln + 8 * S, G.shoulderY + by + 2 * S, 17 * S, -2.3, -0.7); ctx.stroke();
+                // a few speckles between the stripes
+                ctx.fillStyle = 'rgba(40,112,46,0.7)';
+                [[2, 58, 3.4], [22, 92, 2.8], [46, 108, 3.2], [-6, 88, 2.4], [34, 64, 2.2]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(cx + x * S - ln * 0.3, tL + y * S, r * S, 0, 6.283); ctx.fill(); });
+                // soft inner edge all round, and a rim of light along the top of the back
+                ctx.strokeStyle = 'rgba(15,45,45,0.3)'; ctx.lineWidth = 15 * S; ctx.stroke(torso);
+                ctx.strokeStyle = 'rgba(235,255,190,0.4)'; ctx.lineWidth = 4 * S;
+                ctx.beginPath();
+                for (let q = 0; q <= 10; q++) { const t = 0.02 + q * 0.04, [tx, ty] = bkT(t); const x = bk(t, 0) - ty * 8 * S, y = bk(t, 1) + tx * 8 * S; q ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+                ctx.stroke();
+            }
             ctx.restore();
             ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke(torso);
             // short, thick neck
             const nx = G.neckX - ln, ny = G.neckY + by, hbx = boss.hx + 40 * S, hby = boss.hy + 10 * S;
             const neck = (w, col, dx, dy) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(nx + dx, ny + dy); ctx.quadraticCurveTo((nx + hbx) / 2 + 10 * S + dx, (ny + hby) / 2 + dy, hbx + dx, hby + dy); ctx.stroke(); };
             neck(66 * S, INK, 0, 0); neck(59 * S, DINO_COL.body, 0, 0); neck(16 * S, DINO_COL.belly, -18 * S, 4 * S);
+            neck(13 * S, 'rgba(15,45,45,0.26)', 21 * S, -2 * S);                // shaded back of the neck
+            neck(5 * S, 'rgba(255,255,210,0.22)', -3 * S, -1 * S);              // light catching the front
+            {
+                const cxn = (nx + hbx) / 2 + 10 * S, cyn = (ny + hby) / 2;
+                const qp = t => [(1 - t) * (1 - t) * nx + 2 * (1 - t) * t * cxn + t * t * hbx, (1 - t) * (1 - t) * ny + 2 * (1 - t) * t * cyn + t * t * hby];
+                const qn = t => { const x = 2 * (1 - t) * (cxn - nx) + 2 * t * (hbx - cxn), y = 2 * (1 - t) * (cyn - ny) + 2 * t * (hby - cyn), l = Math.hypot(x, y) || 1; return [-y / l, x / l]; };
+                for (const t of [0.22, 0.42, 0.62, 0.8]) {
+                    const [px, py] = qp(t), [ax, ay] = qn(t);
+                    const sgn = ax > 0 ? 1 : -1;                              // +: toward his back
+                    ctx.strokeStyle = 'rgba(40,112,46,0.85)'; ctx.lineWidth = 6.5 * S;                     // stripes over the back of the neck
+                    ctx.beginPath(); ctx.moveTo(px + ax * sgn * 24 * S, py + ay * sgn * 24 * S); ctx.lineTo(px + ax * sgn * 9 * S, py + ay * sgn * 9 * S); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(95,120,60,0.7)'; ctx.lineWidth = 1.8 * S;                      // folds across the throat
+                    ctx.beginPath(); ctx.moveTo(px - ax * sgn * 26 * S, py - ay * sgn * 26 * S); ctx.lineTo(px - ax * sgn * 11 * S, py - ay * sgn * 11 * S); ctx.stroke();
+                }
+            }
             // front arm
             const hand = drawDinoArm(G.shoulderX - ln, G.shoulderY + by, a1, a2, S, false);
             boss._hf = hand; boss._hb = backHand;
@@ -6322,6 +7155,8 @@
                     ctx.beginPath(); ctx.moveTo(mx, my); ctx.quadraticCurveTo(mx - 4 * S, (my + hand.y - 30 * S) / 2, hand.x - 2 * S, hand.y - 28 * S); ctx.stroke();
                 }
             }
+            // churned-up earth around his base
+            if ((boss.rise === undefined ? 1 : boss.rise) > 0.15) drawDinoRubble(G, S);
             // head
             drawDinoHead(S);
             ctx.restore();
@@ -7024,6 +7859,15 @@
             const gy = groundY();
             const AP = state.activePowerups;
             const sc = bird.miniK || 1;                                  // Mini Me shrinks the hitbox with the bird
+            // the boss is beaten: the bird is invincible through the whole death scene and a moment after it
+            const won = (boss.active && (boss.state === 'DYING' || boss.state === 'DEFEATED')) || state.winSafe > 0;
+            if (won && bird.y + bird.height / 2 * sc >= gy) {
+                bird.y = gy - bird.height / 2 * sc - 1; bird.velocity = -8;
+                sound.playBoing();
+                for (let k = 0; k < 5; k++) particles.push({ type: 'star', x: bird.x + rand(-8, 8), y: gy - 2, vx: rand(-3, 3), vy: -rand(2, 5), rot: 0, vr: 0.2, size: rand(4, 7), color: '#ffd23f', alpha: 1, life: 0.6 });
+                return { hit: false };
+            }
+            if (won) return { hit: false };
             if (bird.y + bird.height / 2 * sc >= gy) {
                 if (AP.pringle) {                                        // Pringle Power: the floor bounces you back up
                     bird.y = gy - bird.height / 2 * sc - 1; bird.velocity = -8.5;
@@ -7032,6 +7876,7 @@
                 } else return { hit: true, cause: 'GROUND' };
             }
             if (AP.pringle) return { hit: false };                      // invincible to everything else
+            if (lightningHit() && !absorbHit()) return { hit: true, cause: 'LIGHTNING' };
 
             const box = { left: bird.x - 12 * sc, right: bird.x + 12 * sc, top: bird.y - 10 * sc, bottom: bird.y + 10 * sc };
             const ghost = !!AP.ghost;                                    // Ghost: passes through solid things
@@ -7154,11 +7999,367 @@
         }
 
         // ---------- Main update / render ----------
+        // =====================================================
+        //                    WEATHER EVENTS
+        // =====================================================
+        // During a normal run the sky changes mood every so often. Each event fades in, lasts ~15-25 s
+        // and fades out; none of them happen during boss fights.
+        //   rain      - streaks + splashes, wet feathers (a bit heavier), slowly washes the blood away
+        //   storm     - heavy rain + lightning: a strike is telegraphed, then the bolt kills what it touches
+        //   wind      - updraft / downdraft gusts (warned with arrows) that shove the bird, blood and feathers
+        //   fog       - a bank rolls in from the right and hides the pipes ahead until they're close
+        //   snow      - flakes that settle on the ground and pile up on the pipe rims
+        //   bloodrain - rare: the sky rains blood (needs gore on)
+        const WEATHER_INFO = {
+            rain:      { label: 'RAIN',        sub: 'Wet feathers: you fall a bit faster', color: '#7fb4ff', dur: [1000, 1400] },
+            storm:     { label: 'THUNDERSTORM', sub: 'Watch for the lightning warning!',   color: '#ffe066', dur: [1100, 1500] },
+            wind:      { label: 'WIND',        sub: 'Gusts push you up and down',         color: '#c8f0ff', dur: [900, 1300] },
+            fog:       { label: 'FOG',         sub: "You can't see far ahead",            color: '#e8eef5', dur: [900, 1200] },
+            snow:      { label: 'SNOW',        sub: 'It is getting cold out here',         color: '#ffffff', dur: [1100, 1500] },
+            bloodrain: { label: 'BLOOD RAIN',  sub: 'Plukbering is not happy',             color: '#ff4d4d', dur: [700, 1000] }
+        };
+        const weather = { kind: null, t: 0, dur: 0, k: 0, next: 700, last: null, banner: 0,
+                          gust: 0, gustDir: 0, gustWarn: 0, gustT: 0, strikeT: 0, flash: 0,
+                          snowDepth: 0, wash: 0 };
+        let rainDrops = [], flakes = [], windLines = [], fogBlobs = [], bolts = [], strikes = [];
+
+        function resetWeather() {
+            weather.kind = null; weather.k = 0; weather.t = 0; weather.next = rand(600, 800); weather.banner = 0;
+            weather.gust = 0; weather.gustWarn = 0; weather.gustT = 0; weather.flash = 0; weather.snowDepth = 0;
+            rainDrops = []; flakes = []; windLines = []; fogBlobs = []; bolts = []; strikes = [];
+            pipes.forEach(p => p.snow = 0);
+        }
+
+        function pickWeather() {
+            const pool = ['rain', 'storm', 'wind', 'fog', 'snow'];
+            if (state.goreLevel !== 'none' && Math.random() < 0.12) return 'bloodrain';
+            let k;
+            do { k = pick(pool); } while (k === weather.last && Math.random() < 0.85);
+            return k;
+        }
+
+        function startWeather(kind) {
+            const I = WEATHER_INFO[kind];
+            weather.kind = kind; weather.last = kind; weather.t = 0;
+            weather.dur = Math.round(rand(I.dur[0], I.dur[1]));
+            weather.banner = 150;
+            weather.gustT = 160; weather.strikeT = 200;
+            if (kind === 'fog') {
+                fogBlobs = [];
+                for (let i = 0; i < (state.perf ? 5 : 9); i++) fogBlobs.push({ x: state.width + rand(0, state.width), y: rand(0, groundY()), r: rand(60, 130), v: rand(0.3, 0.8) });
+            }
+            achState.weather = achState.weather || {};
+            if (!achState.weather[kind]) { achState.weather[kind] = 1; achSave(); }
+            if (['rain', 'storm', 'wind', 'fog', 'snow'].every(w => achState.weather[w])) achUnlock('weather_all');
+            try { if (kind === 'storm') sound.playThunder(0.5); else if (kind === 'wind') sound.playWind(); } catch (e) {}
+        }
+
+        // extra vertical force on the bird this frame (wet feathers, gusts)
+        function weatherLift() {
+            if (!weather.kind || state.status !== 'PLAYING') return 0;
+            let f = 0;
+            if (weather.kind === 'rain' || weather.kind === 'storm') f += 0.025 * weather.k;
+            if (weather.kind === 'wind' && weather.gust > 0) f += weather.gustDir * 0.2 * weather.k * Math.sin(Math.PI * Math.min(1, weather.gust / 90));
+            return f;
+        }
+
+        function updateWeather() {
+            const W = state.width, gy = groundY();
+            const playing = state.status === 'PLAYING';
+            const blocked = !state.weatherOn || state.bossOnlyRun || boss.active || state.bossIncoming;
+            // scheduling
+            if (playing && !weather.kind && !blocked && state.score >= 5) {
+                if (--weather.next <= 0) startWeather(pickWeather());
+            }
+            if (weather.kind) {
+                if (playing) weather.t++;
+                const ending = weather.t > weather.dur || blocked;
+                weather.k = clamp(weather.k + (ending ? -1 / 90 : 1 / 120), 0, 1);
+                if (ending && weather.k <= 0) { weather.kind = null; weather.next = rand(900, 1500); }
+            }
+            if (weather.banner > 0) weather.banner--;
+            if (weather.flash > 0) weather.flash--;
+            const kind = weather.kind, k = weather.k;
+
+            // --- rain / storm / blood rain ---
+            const wet = kind === 'rain' || kind === 'storm';
+            if (wet && k > 0) {
+                const n = Math.round((kind === 'storm' ? 7 : 4) * k * (state.perf ? 0.5 : 1));
+                for (let i = 0; i < n; i++) rainDrops.push({ x: rand(-40, W + 80), y: rand(-30, -5), vx: kind === 'storm' ? -3.2 : -1.6, vy: rand(11, 15) });
+                // rain slowly washes the blood off the ground
+                if (state.frameCount % 20 === 0) {
+                    bctx.save(); bctx.globalCompositeOperation = 'destination-out';
+                    bctx.fillStyle = `rgba(0,0,0,${0.035 * k})`; fillBand(bctx, BL);
+                    for (const P of pools) P.vol *= 1 - 0.01 * k;
+                    bctx.restore();
+                }
+            }
+            for (let i = rainDrops.length - 1; i >= 0; i--) {
+                const d = rainDrops[i];
+                d.x += d.vx; d.y += d.vy;
+                let hitY = gy + 4;
+                for (const pipe of pipes) {                                   // splash on the lower pipe's rim
+                    if (d.x > pipe.x - RIM_O && d.x < pipe.x + PIPE_W + RIM_O && d.y < pipeBottomY(pipe) + 4) { hitY = Math.min(hitY, pipeBottomY(pipe)); break; }
+                }
+                if (d.y >= hitY) {
+                    if (Math.random() < 0.5) particles.push({ type: 'splash', x: d.x, y: hitY, vx: rand(-1, 1), vy: -rand(0.8, 2), radius: rand(0.8, 1.6), alpha: 0.7, life: 0.35, color: '#cfe3ff' });
+                    rainDrops.splice(i, 1);
+                } else if (d.x < -60) rainDrops.splice(i, 1);
+            }
+            if (kind === 'bloodrain' && k > 0 && state.goreLevel !== 'none') {
+                const n = (state.goreLevel === 'light' ? 1 : 2) + (Math.random() < k ? 1 : 0);
+                for (let i = 0; i < n; i++) spawnDrop(rand(0, W + 40), -10, rand(-1.2, -0.4), rand(6, 9), rand(0.9, 2.4), 0);
+            }
+
+            // --- snow ---
+            if (kind === 'snow' && k > 0) {
+                if (Math.random() < 3.2 * k) for (let i = 0; i < (state.perf ? 1 : 2); i++) flakes.push({ x: rand(-20, W + 60), y: -8, vy: rand(0.8, 1.8), r: rand(1.2, 3.2), ph: rand(0, BTAU) });
+                weather.snowDepth = Math.min(7, weather.snowDepth + 0.004 * k);
+                for (const pipe of pipes) pipe.snow = Math.min(9, (pipe.snow || 0) + 0.012 * k);
+            } else if (weather.snowDepth > 0) weather.snowDepth = Math.max(0, weather.snowDepth - 0.004);
+            for (let i = flakes.length - 1; i >= 0; i--) {
+                const f = flakes[i];
+                f.ph += 0.04; f.x += Math.sin(f.ph) * 0.6 - 1.2; f.y += f.vy;
+                if (f.y > gy + 3 || f.x < -30) flakes.splice(i, 1);
+            }
+
+            // --- wind gusts ---
+            if (kind === 'wind' && k > 0) {
+                if (weather.gust > 0) {
+                    weather.gust--;
+                    if (Math.random() < 0.8) windLines.push({ x: W + 20, y: rand(10, gy - 10), len: rand(40, 110), v: rand(9, 15) });
+                } else if (weather.gustWarn > 0) {
+                    if (--weather.gustWarn === 0) { weather.gust = 90; try { sound.playWind(); } catch (e) {} }
+                } else if (--weather.gustT <= 0 && k > 0.6 && playing) {
+                    weather.gustDir = Math.random() < 0.5 ? -1 : 1; weather.gustWarn = 50; weather.gustT = rand(150, 240);
+                }
+                if (Math.random() < 0.3 * k) windLines.push({ x: W + 20, y: rand(10, gy - 10), len: rand(25, 60), v: rand(6, 9) });
+                // the wind carries blood and feathers with it
+                const push = (weather.gust > 0 ? 0.14 : 0.04) * k;
+                for (const p of bloodDrops) if (!p.dead) { p.vx -= push; if (weather.gust > 0) p.vy += weather.gustDir * push * 0.6; }
+                for (const c of chunks) if (c.type === 'feather') c.x -= push * 14;
+            } else { weather.gust = 0; weather.gustWarn = 0; }
+            for (let i = windLines.length - 1; i >= 0; i--) { const w = windLines[i]; w.x -= w.v; if (w.x + w.len < -20) windLines.splice(i, 1); }
+
+            // --- fog ---
+            for (const b of fogBlobs) { b.x -= b.v; if (b.x + b.r < -40) { b.x = W + b.r + rand(0, 100); b.y = rand(0, gy); } }
+
+            // --- lightning ---
+            if (kind === 'storm' && k > 0.7 && playing && !blocked) {
+                if (--weather.strikeT <= 0) {
+                    weather.strikeT = rand(170, 300);
+                    const x = clamp(bird.x + (Math.random() < 0.55 ? rand(-25, 25) : rand(60, 260)), 20, W - 20);
+                    strikes.push({ x, warn: 62 });
+                }
+            }
+            for (let i = strikes.length - 1; i >= 0; i--) {
+                const s = strikes[i];
+                if (--s.warn <= 0) { fireBolt(s.x); strikes.splice(i, 1); }
+            }
+            for (let i = bolts.length - 1; i >= 0; i--) if (--bolts[i].life <= 0) bolts.splice(i, 1);
+        }
+
+        function fireBolt(x) {
+            const gy = groundY();
+            let endY = gy;
+            for (const pipe of pipes) if (x > pipe.x - RIM_O && x < pipe.x + PIPE_W + RIM_O) endY = pipeBottomY(pipe);   // the pipe takes the hit
+            const pts = [[x + rand(-10, 10), -10]];
+            for (let y = 20; y < endY; y += rand(18, 34)) pts.push([x + rand(-14, 14), y]);
+            pts.push([x, endY]);
+            const forks = [];
+            for (let f = 0; f < 2; f++) {
+                const s = pts[1 + Math.floor(rand(0, pts.length - 2))];
+                const fk = [s]; let fx = s[0], fy = s[1];
+                for (let j = 0; j < 3; j++) { fx += rand(-26, 26); fy += rand(16, 30); fk.push([fx, fy]); }
+                forks.push(fk);
+            }
+            bolts.push({ x, endY, pts, forks, life: 16 });
+            weather.flash = 10;
+            try { sound.playThunder(1); } catch (e) {}
+            shakeScreen();
+            for (let i = 0; i < 14; i++) particles.push({ x, y: endY - 2, vx: rand(-4, 4), vy: -rand(1, 5), color: Math.random() < 0.5 ? '#fff6b0' : '#ffd23f', radius: rand(1.4, 3), alpha: 1, life: 0.5 });
+            // scorch mark where it lands
+            if (endY >= gy) {
+                bctx.save(); bctx.fillStyle = 'rgba(25,18,12,0.55)';
+                bctx.beginPath(); bctx.ellipse(x, gy + 4, 14, 3.5, 0, 0, BTAU); bctx.fill(); bctx.restore();
+            }
+        }
+
+        // a bolt kills anything in its column for its first few frames
+        function lightningHit() {
+            for (const b of bolts) {
+                if (b.life < 10) continue;
+                if (Math.abs(bird.x - b.x) < 16 * (bird.miniK || 1) + 6 && bird.y < b.endY) return b;
+            }
+            return null;
+        }
+
+        // ---------- drawing ----------
+        function drawWeatherSky() {
+            const kind = weather.kind, k = weather.k;
+            if (!kind || k <= 0) return;
+            let col = null, a = 0;
+            if (kind === 'rain') { col = '60,70,90'; a = 0.32; }
+            else if (kind === 'storm') { col = '28,32,48'; a = 0.5; }
+            else if (kind === 'snow') { col = '200,210,228'; a = 0.28; }
+            else if (kind === 'fog') { col = '190,198,208'; a = 0.22; }
+            else if (kind === 'bloodrain') { col = '120,10,20'; a = 0.38; }
+            else if (kind === 'wind') { col = '170,190,200'; a = 0.1; }
+            ctx.fillStyle = `rgba(${col},${a * k})`;
+            ctx.fillRect(0, 0, state.width, state.height);
+        }
+
+        function drawPipeSnow() {
+            ctx.save();
+            ctx.fillStyle = '#f6f9ff'; ctx.strokeStyle = 'rgba(120,140,170,0.6)'; ctx.lineWidth = 1;
+            for (const pipe of pipes) {
+                const h = pipe.snow || 0;
+                if (h < 0.4) continue;
+                const by = pipeBottomY(pipe), L = pipe.x - RIM_O - 1, R = pipe.x + PIPE_W + RIM_O + 1;
+                ctx.beginPath();
+                ctx.moveTo(L, by + 1);
+                ctx.quadraticCurveTo(L - 1, by - h * 0.6, L + 6, by - h * 0.8);
+                ctx.quadraticCurveTo((L + R) / 2, by - h * 1.25, R - 6, by - h * 0.8);
+                ctx.quadraticCurveTo(R + 1, by - h * 0.6, R, by + 1);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                // a few icicles hanging off the upper pipe
+                if (h > 3) {
+                    ctx.beginPath();
+                    for (let i = 0; i < 3; i++) {
+                        const ix = L + 8 + i * (R - L - 16) / 2, il = 3 + h * 0.5 * (0.6 + 0.4 * Math.sin(ix));
+                        ctx.moveTo(ix - 2, pipe.top); ctx.lineTo(ix, pipe.top + il); ctx.lineTo(ix + 2, pipe.top);
+                    }
+                    ctx.fillStyle = 'rgba(220,240,255,0.95)'; ctx.fill();
+                    ctx.fillStyle = '#f6f9ff';
+                }
+            }
+            ctx.restore();
+        }
+
+        function drawFog() {
+            const k = weather.kind === 'fog' ? weather.k : 0;
+            if (k <= 0) return;
+            const W = state.width, gy = groundY();
+            const x0 = bird.x + 70;
+            ctx.save();
+            const g = ctx.createLinearGradient(x0, 0, x0 + 170, 0);
+            g.addColorStop(0, 'rgba(226,232,240,0)');
+            g.addColorStop(1, `rgba(226,232,240,${0.9 * k})`);
+            ctx.fillStyle = g; ctx.fillRect(x0, 0, W - x0, gy);
+            ctx.fillStyle = `rgba(236,240,246,${0.35 * k})`;
+            for (const b of fogBlobs) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, BTAU); ctx.fill(); }
+            ctx.restore();
+        }
+
+        function drawGroundSnow() {
+            const d = weather.snowDepth;
+            if (d < 0.3) return;
+            const gy = groundY(), W = state.width, off = state.groundOffset % 40;
+            ctx.save();
+            ctx.fillStyle = '#f6f9ff';
+            ctx.beginPath(); ctx.moveTo(0, gy + 6);
+            for (let x = 0; x <= W + 40; x += 20) ctx.lineTo(x - off, gy - d * (0.8 + 0.35 * Math.sin((x - off) * 0.07 + 1)));
+            ctx.lineTo(W, gy + 6); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawWeatherFront() {
+            const W = state.width, k = weather.k, gy = groundY();
+            ctx.save();
+            // rain
+            if (rainDrops.length) {
+                ctx.strokeStyle = 'rgba(200,220,255,0.55)'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+                ctx.beginPath();
+                for (const d of rainDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.vx * 1.4, d.y - d.vy * 1.4); }
+                ctx.stroke();
+            }
+            // snow
+            if (flakes.length) {
+                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                ctx.beginPath();
+                for (const f of flakes) { ctx.moveTo(f.x + f.r, f.y); ctx.arc(f.x, f.y, f.r, 0, BTAU); }
+                ctx.fill();
+            }
+            // wind streaks
+            if (windLines.length) {
+                ctx.strokeStyle = INK; ctx.globalAlpha = 0.25; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                ctx.beginPath();
+                for (const w of windLines) { ctx.moveTo(w.x, w.y); ctx.quadraticCurveTo(w.x + w.len * 0.5, w.y - 3, w.x + w.len, w.y); }
+                ctx.stroke(); ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (const w of windLines) { ctx.moveTo(w.x, w.y); ctx.quadraticCurveTo(w.x + w.len * 0.5, w.y - 3, w.x + w.len, w.y); }
+                ctx.stroke();
+            }
+            // gust warning arrows
+            if (weather.gustWarn > 0 || weather.gust > 0) {
+                const up = weather.gustDir < 0, blink = weather.gustWarn > 0 ? (Math.floor(weather.gustWarn / 6) % 2 === 0) : true;
+                if (blink) {
+                    const a = weather.gust > 0 ? 0.35 : 0.9;
+                    ctx.globalAlpha = a;
+                    for (let i = 0; i < 3; i++) {
+                        const ax = W * (0.25 + i * 0.25), ay = up ? 60 : gy - 60;
+                        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        const s = up ? -1 : 1;
+                        ctx.moveTo(ax, ay + s * 16); ctx.lineTo(ax - 16, ay - s * 2); ctx.lineTo(ax - 6, ay - s * 2);
+                        ctx.lineTo(ax - 6, ay - s * 16); ctx.lineTo(ax + 6, ay - s * 16); ctx.lineTo(ax + 6, ay - s * 2); ctx.lineTo(ax + 16, ay - s * 2);
+                        ctx.closePath(); ctx.fill(); ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1;
+                    if (weather.gustWarn > 0) outlinedText(up ? 'UPDRAFT!' : 'DOWNDRAFT!', W / 2, up ? 100 : gy - 100, 20, '#ffffff', 6);
+                }
+            }
+            // lightning warnings: a flickering glow down the column it will hit
+            for (const s of strikes) {
+                const on = s.warn < 24 ? (s.warn % 4 < 2) : (s.warn % 10 < 6);
+                if (!on) continue;
+                const g = ctx.createLinearGradient(s.x - 18, 0, s.x + 18, 0);
+                g.addColorStop(0, 'rgba(255,230,100,0)'); g.addColorStop(0.5, `rgba(255,230,100,${s.warn < 24 ? 0.45 : 0.25})`); g.addColorStop(1, 'rgba(255,230,100,0)');
+                ctx.fillStyle = g; ctx.fillRect(s.x - 18, 0, 36, gy);
+                outlinedText('⚡', s.x, 26, 22, '#ffe066', 5);
+            }
+            // bolts
+            for (const b of bolts) {
+                const a = Math.min(1, b.life / 8);
+                const line = (pts, w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); };
+                ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+                ctx.globalAlpha = a;
+                line(b.pts, 12, 'rgba(255,240,150,0.35)');
+                line(b.pts, 5, '#fff3a0');
+                line(b.pts, 2, '#ffffff');
+                for (const f of b.forks) { line(f, 3, '#fff3a0'); line(f, 1.2, '#ffffff'); }
+                ctx.globalAlpha = 1;
+            }
+            ctx.restore();
+            // screen flash
+            if (weather.flash > 0) {
+                ctx.fillStyle = `rgba(255,255,240,${weather.flash / 10 * 0.6})`;
+                ctx.fillRect(0, 0, W, state.height);
+            }
+            // banner
+            if (weather.banner > 0 && weather.kind) {
+                const I = WEATHER_INFO[weather.kind];
+                const t = weather.banner, a = Math.min(1, t / 20, (150 - t) / 15 + 0.001);
+                ctx.save(); ctx.globalAlpha = clamp(a, 0, 1);
+                outlinedText(I.label, W / 2, state.height * 0.2, 34, I.color, 9);
+                outlinedText(I.sub, W / 2, state.height * 0.2 + 32, 15, '#ffffff', 5);
+                ctx.restore();
+            }
+        }
+
         function update() {
+            if (state.vs) updateVs();
             if (state.paused) return;   // settings sheet open mid-run
             state.frameCount++;
+            // brief slow-mo on impacts eases back to full speed in every state
+            // (it used to recover only after death, so a boss death mid-run left the game stuck at half speed)
+            if (state.slowSteps > 0) { state.slowSteps--; state.timeScale = 0.45 + 0.55 * (1 - state.slowSteps / 40); }
+            else if (state.timeScale !== 1) state.timeScale = 1;
             if (state.hurtFlash > 0) state.hurtFlash--;
             if (state.invuln > 0) state.invuln--;
+            if (state.winSafe > 0 && state.status === 'PLAYING') state.winSafe--;
+            if (state.status === 'PLAYING' && boss.active && (boss.state === 'DYING' || boss.state === 'DEFEATED')) state.invuln = Math.max(state.invuln, 30);   // blinks: safe
 
             updateClouds();
             updateBlood();
@@ -7168,6 +8369,7 @@
             updateRocks();
             updatePopups();
             updateStains();
+            updateWeather();
 
             if (state.status === 'START') {
                 bird.y = state.height / 2 - 20 + Math.sin(state.frameCount * 0.08) * 8;
@@ -7219,9 +8421,6 @@
                 const sf = speedFactor();
                 const diff = DIFFICULTIES[state.difficultyIndex];
 
-                // brief slow-mo on impact that eases back to full speed
-                if (state.slowSteps > 0) { state.slowSteps--; state.timeScale = 0.45 + 0.55 * (1 - state.slowSteps / 40); }
-                else state.timeScale = 1;
 
                 bird.update();
                 // Ground, camera, and background are stationary in GAMEOVER
@@ -7247,30 +8446,38 @@
             ctx.clearRect(0, 0, state.width, state.height);
 
             drawBackground();
+            drawWeatherSky();
             drawPiranhaPlants();
             drawPipes();
+            drawPipeSnow();
             drawPiranhaFireballs();
             drawThwops();
             drawGloveCloud();
             drawGloveHazards();
             drawPowerUpOrbs();
+            drawFog();
             drawGround();
+            drawGroundSnow();
             drawSlamWarner();
             drawBoss();
             drawBossLasersAndSpikes();
             drawRocks();
-            ctx.drawImage(bloodLayer, 0, 0, state.width, state.height);
-            ctx.drawImage(goreLayer, 0, 0, state.width, state.height);
+            blitLayer(bloodLayer, BL);
+            drawPools();
+            blitLayer(goreLayer, GL);
             drawPuddleGloss();
             drawBloodDrops();
             drawChunks();
             drawRemains(ctx);
             bird.draw(ctx);
             drawParticles();
+            drawWeatherFront();
             drawMittForeground();
             drawBossHud();
             drawPopups();
             drawFourthWall();
+            drawLensBlood();
+            drawVs();
 
             drawPauseOverlay();
             if (state.flashEffectTimer > 0) {
@@ -7305,11 +8512,12 @@
         window.addEventListener('error', e => { if (e.error) reportError(e.error); });
 
         function gameLoop(now) {
+            watchFrame(Math.min(100, now - lastTime));
             acc += Math.min(50, now - lastTime) * (state.timeScale || 1);
             lastTime = now;
             let steps = 0;
             try {
-            while (acc >= FIXED_DT && steps < 2) { update(); acc -= FIXED_DT; steps++; }
+            while (acc >= FIXED_DT && steps < 4) { update(); acc -= FIXED_DT; steps++; }   // up to 4 steps: under 30 fps the game stays at real speed instead of going slow-mo
             if (acc > FIXED_DT) acc = 0;          // drop backlog instead of snowballing when slow
             if (steps > 0 || now - lastRender > 14) { render(); lastRender = now; }   // on 120 Hz screens skip redundant redraws
             } catch (err) { reportError(err); }
@@ -7361,6 +8569,7 @@
         }
 
         function triggerFlap() {
+            if (state.vs) { if (state.vs.t > 34 && state.vs.t < VS_OUT - 1) state.vs.t = VS_OUT - 1; return; }   // tap to skip the VS card
             if (state.paused || state.fading) return;
             if (state.status === 'START') startGame();
             else if (state.status === 'PLAYING') bird.flap();
@@ -7373,11 +8582,13 @@
             piranhaFireballs = [];
             gloveHazards = []; gloveCloud.active = false; gloveCloud.dropTimer = 210;
             clearBlood();
+            resetWeather();
             state.activePowerups = {};
             state.invuln = 0;
             state.pipeTimer = DIFFICULTIES[state.difficultyIndex].pipeInterval * 0.4;
             state.hurtFlash = 0;
             state.timeScale = 1; state.slowSteps = 0;
+            state.winSafe = 0;
             bird.reset();
 
             resetBoss();
@@ -7443,6 +8654,294 @@
             updatePowerUpHUD();
         }
 
+        // =====================================================
+        //              "VS" INTRO (Bosses menu only)
+        // =====================================================
+        // Picking a boss from the Bosses menu opens with a split-screen title card: the bird gliding on the
+        // left, the boss idling on the right, each framed by cartoon theatre curtains, and a slanted bar with
+        // "VS" between them. The bar drifts right, then shoots off to the right while everything fades into the fight.
+        const VS_OUT = 165, VS_END = 200;
+        let vsCv = null;
+        const VS_BOSS = {
+            crusher: { name: 'BIG MR. CRUSHER', bg: ['#6d1626', '#e2564a'] },
+            glove:   { name: 'MR. MITT',        bg: ['#33257f', '#c966a6'] },
+            dino:    { name: 'MR. CHOMPSALOT',  bg: ['#a94a06', '#fbbf24'] }
+        };
+        function startVsIntro(kind) {
+            sound.init();
+            clearTimeout(gameOverTimer); clearTimeout(eyeTimer); clearTimeout(startHideTimer);
+            setEyeVisible(false);
+            startModal.classList.add('opacity-0', 'pointer-events-none');
+            startHideTimer = setTimeout(() => startModal.classList.add('hidden'), 300);
+            gameOverModal.classList.add('hidden');
+            clearTimeout(hintTimer); hintEl.style.opacity = '0';
+            document.getElementById('hud-overlay').style.visibility = 'hidden';
+            state.manualPause = false; state.paused = false;
+            state.vs = { kind, t: 0, parts: [], pops: [], started: false, bx: 0, flash: 0 };
+            try { sound.noise(0.5, 0.22, 1400); } catch (e) {}
+        }
+        function vsSpark(x, y, vx, vy, col, size, life) {
+            const v = state.vs; if (!v || v.parts.length > 140) return;
+            v.parts.push({ x, y, vx, vy, col, size, life, max: life, rot: rand(0, 6.28), vr: rand(-0.3, 0.3) });
+        }
+        function updateVs() {
+            const v = state.vs, W = state.width, H = state.height;
+            v.t++;
+            const t = v.t;
+            if (v.flash > 0) v.flash -= 0.09;
+            if (t === 14) { v.flash = 0.9; try { sound.tone('square', 180, 90, 0.18, 0.25); } catch (e) {} }
+            if (t === 30) {                                              // "VS" slams in
+                v.flash = 1; shakeScreen();
+                try { sound.playHit(); sound.tone('sawtooth', 220, 55, 0.45, 0.4); sound.noise(0.3, 0.35, 900); } catch (e) {}
+                for (let i = 0; i < 30; i++) { const a = rand(0, 6.283), s = rand(3, 11); vsSpark(W / 2, H * 0.47, Math.cos(a) * s, Math.sin(a) * s, pick(['#ffffff', '#ffd23f', '#fff3a0']), rand(4, 9), rand(24, 44)); }
+            }
+            if (t > 30 && t < VS_OUT) {
+                v.bx += 0.42;                                           // the bar and "VS" drift slowly to the right
+                if (t % 3 === 0) {                                      // sparks streaming up the bar
+                    const yy = rand(0, H), xx = W / 2 + v.bx + (H * 0.5 - yy) * (Math.min(H * 0.14, W * 0.09) / (H * 0.5)) + (Math.random() < 0.5 ? -1 : 1) * clamp(W * 0.055, 22, 60);
+                    vsSpark(xx, yy, rand(0.5, 2), -rand(1, 3.5), pick(['#ffd23f', '#ffffff', '#ff9d3c']), rand(2.5, 5), rand(18, 30));
+                }
+                if (t % 26 === 8) {                                     // camera flashes going off around the stage
+                    v.pops.push({ x: rand(W * 0.06, W * 0.94), y: rand(H * 0.12, H * 0.62), life: 9, r: rand(26, 60) });
+                    v.flash = Math.max(v.flash, 0.22);
+                    try { sound.tone('sine', 1500, 900, 0.05, 0.05); } catch (e) {}
+                }
+            }
+            if (t === VS_OUT) {                                          // the fight begins underneath while the card flies off
+                v.flash = 1;
+                try { sound.noise(0.45, 0.3, 2600); sound.tone('sawtooth', 300, 900, 0.3, 0.2); } catch (e) {}
+                document.getElementById('hud-overlay').style.visibility = '';
+                v.started = true;
+                startBossGame(v.kind);
+            }
+            if (t > VS_OUT) {
+                const k = (t - VS_OUT) / (VS_END - VS_OUT);
+                v.bx += 6 + k * k * W * 0.22;                           // ...then whips away to the right
+                for (let i = 0; i < 2; i++) vsSpark(W / 2 + v.bx - rand(0, 60), rand(0, H), -rand(2, 7), rand(-1.5, 1.5), pick(['#ffd23f', '#ffffff']), rand(3, 6), rand(10, 20));
+            }
+            for (let i = v.parts.length - 1; i >= 0; i--) { const p = v.parts[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.96; p.vy = p.vy * 0.96 + 0.08; p.rot += p.vr; if (--p.life <= 0) v.parts.splice(i, 1); }
+            for (let i = v.pops.length - 1; i >= 0; i--) if (--v.pops[i].life <= 0) v.pops.splice(i, 1);
+            if (t >= VS_END) state.vs = null;
+        }
+        // white Fredoka lettering with a black outline; each letter can bob on its own wave and pop in one after another
+        function vsText(txt, x, y, size, maxW, t, opt) {
+            opt = opt || {};
+            ctx.save();
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+            ctx.font = `700 ${size}px Fredoka, "Trebuchet MS", system-ui, sans-serif`;
+            let tw = ctx.measureText(txt).width;
+            if (maxW && tw > maxW) { size *= maxW / tw; ctx.font = `700 ${size}px Fredoka, "Trebuchet MS", system-ui, sans-serif`; tw = ctx.measureText(txt).width; }
+            let cx = x - tw / 2;
+            for (let i = 0; i < txt.length; i++) {
+                const ch = txt[i], w = ctx.measureText(ch).width;
+                const born = (opt.delay || 0) + i * (opt.stagger || 0);
+                const k = clamp((t - born) / 9, 0, 1);
+                if (k > 0 && ch !== ' ') {
+                    const pop = k < 1 ? 1 + Math.sin(k * Math.PI) * 0.55 : 1;
+                    const dy = Math.sin(t * 0.13 + i * 0.7) * size * (opt.wave === undefined ? 0.07 : opt.wave) + (1 - k) * -size * 0.8;
+                    const rot = Math.sin(t * 0.09 + i * 1.3) * (opt.wob === undefined ? 0.06 : opt.wob);
+                    ctx.save(); ctx.translate(cx + w / 2, y + dy); ctx.rotate(rot); ctx.scale(pop, pop);
+                    ctx.globalAlpha *= k;
+                    ctx.fillStyle = '#000000'; ctx.fillText(ch, size * 0.05, size * 0.1);                       // drop shadow
+                    ctx.strokeStyle = '#000000'; ctx.lineWidth = size * 0.26; ctx.strokeText(ch, 0, 0);
+                    ctx.fillStyle = '#ffffff'; ctx.fillText(ch, 0, 0);
+                    ctx.restore();
+                }
+                cx += w;
+            }
+            ctx.restore();
+        }
+        // cartoon stage curtain along the top of an area: a pelmet board, fat scalloped swags with folds, gold trim and tassels
+        function vsValance(x0, x1, y, dep, n, t, board) {
+            board = board === undefined ? 60 : board;
+            const w = (x1 - x0) / n;
+            ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            ctx.fillStyle = '#8a1622'; ctx.strokeStyle = INK; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.rect(x0 - 6, y - board, x1 - x0 + 12, board + dep * 0.34); ctx.fill(); ctx.stroke();
+            for (let i = 0; i < n; i++) {
+                const xa = x0 + i * w, xb = xa + w, mx = (xa + xb) / 2 + Math.sin(t * 0.07 + i * 1.4) * dep * 0.05;
+                const g = ctx.createLinearGradient(xa, 0, xb, 0);
+                g.addColorStop(0, '#a81824'); g.addColorStop(0.5, '#e8454f'); g.addColorStop(1, '#a81824');
+                ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xa, y + dep * 0.3); ctx.quadraticCurveTo(mx, y + dep * 1.6, xb, y + dep * 0.3); ctx.lineTo(xb, y); ctx.closePath();
+                ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke();
+                ctx.strokeStyle = 'rgba(92,8,18,0.6)'; ctx.lineWidth = 2.5;                                       // folds
+                ctx.beginPath(); ctx.moveTo(xa + w * 0.08, y + dep * 0.2); ctx.quadraticCurveTo(mx, y + dep * 1.05, xb - w * 0.08, y + dep * 0.2);
+                ctx.moveTo(xa + w * 0.2, y + dep * 0.1); ctx.quadraticCurveTo(mx, y + dep * 0.6, xb - w * 0.2, y + dep * 0.1); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,200,200,0.35)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(xa + w * 0.3, y + dep * 0.5); ctx.quadraticCurveTo(mx, y + dep * 0.95, xb - w * 0.42, y + dep * 0.72); ctx.stroke();
+                const trim = () => { ctx.beginPath(); ctx.moveTo(xa, y + dep * 0.3); ctx.quadraticCurveTo(mx, y + dep * 1.6, xb, y + dep * 0.3); };
+                trim(); ctx.strokeStyle = INK; ctx.lineWidth = 8; ctx.stroke();
+                trim(); ctx.strokeStyle = '#f5c242'; ctx.lineWidth = 4; ctx.stroke();
+            }
+            for (let i = 0; i <= n; i++) {                                                                        // tassels where the swags meet
+                const x = x0 + i * w, sw = Math.sin(t * 0.09 + i) * 2.5, ty = y + dep * 0.34;
+                ctx.fillStyle = '#f5c242'; ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(x - 4, ty + 5); ctx.lineTo(x - 6 + sw, ty + dep * 0.55); ctx.lineTo(x + 6 + sw, ty + dep * 0.55); ctx.lineTo(x + 4, ty + 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x, ty, 6, 0, 6.283); ctx.fill(); ctx.stroke();
+            }
+            ctx.restore();
+        }
+        // a curtain pulled back to one side and tied with a gold cord (drawn for the left edge; mirror for the right)
+        function vsDrape(h, wd, t) {
+            const tie = h * 0.56, sw = Math.sin(t * 0.05) * 2;
+            ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            const g = ctx.createLinearGradient(0, 0, wd, 0);
+            g.addColorStop(0, '#8a1622'); g.addColorStop(0.45, '#e2414b'); g.addColorStop(1, '#a81824');
+            ctx.beginPath(); ctx.moveTo(-6, -10); ctx.lineTo(wd, -10);
+            ctx.bezierCurveTo(wd * 1.02, tie * 0.5, wd * 0.62, tie * 0.82, wd * 0.34, tie);
+            ctx.bezierCurveTo(wd * 0.5 + sw, tie + (h - tie) * 0.3, wd * 0.74 + sw, tie + (h - tie) * 0.7, wd * 0.66 + sw, h + 6);
+            ctx.lineTo(-6, h + 6); ctx.closePath();
+            ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke();
+            ctx.strokeStyle = 'rgba(92,8,18,0.55)'; ctx.lineWidth = 2.5;
+            [0.3, 0.6].forEach(f => { ctx.beginPath(); ctx.moveTo(wd * f, -6); ctx.bezierCurveTo(wd * f, tie * 0.5, wd * f * 0.6, tie * 0.8, wd * 0.2, tie); ctx.stroke(); ctx.beginPath(); ctx.moveTo(wd * 0.2, tie + 8); ctx.quadraticCurveTo(wd * (0.2 + f * 0.4), tie + (h - tie) * 0.5, wd * f * 0.8, h); ctx.stroke(); });
+            ctx.fillStyle = '#f5c242'; ctx.strokeStyle = INK; ctx.lineWidth = 3;                                  // tie-back cord
+            ctx.beginPath(); ctx.ellipse(wd * 0.2, tie, wd * 0.26, 7, -0.25, 0, 6.283); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(wd * 0.42, tie + 4, 6, 0, 6.283); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+        function drawVs() {
+            const v = state.vs; if (!v) return;
+            const W = state.width, H = state.height, t = v.t, B = VS_BOSS[v.kind] || VS_BOSS.crusher;
+            const ease = k => 1 - Math.pow(1 - clamp(k, 0, 1), 3);
+            const back = k => { k = clamp(k, 0, 1); const c = 1.70158; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+            const out = t > VS_OUT ? (t - VS_OUT) / (VS_END - VS_OUT) : 0;
+            const alpha = 1 - Math.pow(out, 1.4);
+            const slideIn = ease(t / 14);
+            const slant = Math.min(H * 0.14, W * 0.09), bw = clamp(W * 0.055, 22, 60);
+            const cx0 = W / 2 + Math.min(v.bx, 70);                    // the panels follow the slow drift, not the exit
+            const cxB = W / 2 + v.bx;                                   // the bar itself
+            const edge = (cx, y, side) => cx + (H * 0.5 - y) * (slant / (H * 0.5)) + side * bw;
+            const yS = H * 0.7;                                         // top of the lower curtain (name area)
+            const dep = clamp(H * 0.075, 26, 52);
+            const drop = -(1 - back((t - 6) / 24)) * H * 0.4;          // curtains drop in with a bounce
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.globalAlpha = alpha;
+            const panel = (left) => {
+                const off = (left ? -1 : 1) * (1 - slideIn) * W * 0.6 + (left ? -1 : 1) * out * W * 0.08;
+                ctx.save();
+                ctx.translate(off, 0);
+                ctx.beginPath();
+                if (left) { ctx.moveTo(-W, 0); ctx.lineTo(edge(cx0, 0, -1), 0); ctx.lineTo(edge(cx0, H, -1), H); ctx.lineTo(-W, H); }
+                else { ctx.moveTo(W * 2, 0); ctx.lineTo(edge(cx0, 0, 1), 0); ctx.lineTo(edge(cx0, H, 1), H); ctx.lineTo(W * 2, H); }
+                ctx.closePath(); ctx.clip();
+                const x0 = left ? 0 : edge(cx0, yS, 1), x1 = left ? edge(cx0, yS, -1) : W;
+                const pcx = left ? edge(cx0, H * 0.4, -1) * 0.5 : (edge(cx0, H * 0.4, 1) + W) / 2, pcy = H * 0.4;
+                // backdrop: gradient and slowly turning rays of light
+                const cols = left ? ['#1f7fd6', '#9bdcff'] : B.bg;
+                const g = ctx.createLinearGradient(0, 0, 0, H);
+                g.addColorStop(0, cols[0]); g.addColorStop(1, cols[1]);
+                ctx.fillStyle = g; ctx.fillRect(-W, 0, W * 3, H);
+                ctx.fillStyle = 'rgba(255,255,255,0.13)';
+                const R = Math.max(W, H) * 1.5, rot = t * (left ? 0.008 : -0.008);
+                for (let i = 0; i < 12; i++) { const a = rot + i / 12 * 6.283; ctx.beginPath(); ctx.moveTo(pcx, pcy); ctx.lineTo(pcx + Math.cos(a) * R, pcy + Math.sin(a) * R); ctx.lineTo(pcx + Math.cos(a + 0.26) * R, pcy + Math.sin(a + 0.26) * R); ctx.closePath(); ctx.fill(); }
+                const halo = ctx.createRadialGradient(pcx, pcy, 10, pcx, pcy, H * 0.42);
+                halo.addColorStop(0, 'rgba(255,255,255,0.5)'); halo.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = halo; ctx.fillRect(pcx - H * 0.45, pcy - H * 0.45, H * 0.9, H * 0.9);
+                // speed lines rushing past
+                ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineCap = 'round';
+                for (let i = 0; i < 9; i++) {
+                    const sp = 9 + (i * 7) % 6, len = 50 + (i * 37) % 70, yy = H * 0.1 + ((i * 97) % 100) / 100 * H * 0.55;
+                    const span = W * 0.7 + len, xx = left ? (W * 0.55 - ((t * sp + i * 131) % span)) : (W * 0.4 + ((t * sp + i * 131) % span));
+                    ctx.lineWidth = 2 + (i % 3);
+                    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + (left ? len : -len), yy); ctx.stroke();
+                }
+                if (left) {
+                    // the bird, gliding: wings held out, riding the air with a gentle bob and tilt
+                    const k = Math.min(H * 0.3, (x1 - x0) * 0.5) / 34;
+                    const bx = pcx + Math.sin(t * 0.045) * 6 + 8, by = pcy + Math.sin(t * 0.07) * H * 0.016;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3;                                   // slipstream off the wingtips
+                    for (const o of [-9, 7]) { ctx.beginPath(); ctx.moveTo(bx - 16 * k, by + o * k); ctx.quadraticCurveTo(bx - 30 * k, by + o * k + Math.sin(t * 0.2 + o) * 4, bx - (40 + 6 * Math.sin(t * 0.1 + o)) * k, by + o * k + 3); ctx.stroke(); }
+                    ctx.save(); ctx.translate(bx, by); ctx.rotate(-0.12 + Math.sin(t * 0.05) * 0.05); ctx.scale(k, k);
+                    paintBirdArt(ctx, currentSkin(), false, -1, -0.45 + Math.sin(t * 0.06) * 0.14);
+                    ctx.restore();
+                } else {
+                    // the boss, doing his idle animation (the same live art as the Bosses menu)
+                    const K = Math.min((yS - H * 0.03) / 128, (x1 - x0) * 0.86 / 118);
+                    const pw = 118 * K, ph = 128 * K;
+                    if (!vsCv) vsCv = document.createElement('canvas');
+                    const cw = Math.round(pw * dpr), chh = Math.round(ph * dpr);
+                    if (vsCv.width !== cw || vsCv.height !== chh) { vsCv.width = cw; vsCv.height = chh; }
+                    const g2 = vsCv.getContext('2d');
+                    g2.setTransform(1, 0, 0, 1, 0, 0); g2.clearRect(0, 0, cw, chh);
+                    bossIdleInto(g2, v.kind, cw, chh, K * dpr);
+                    const px = clamp(pcx - pw / 2 - (v.kind === 'dino' ? pw * 0.16 : 0), x0 - pw * 0.1, W - pw * 0.95);
+                    ctx.drawImage(vsCv, px, yS - ph + 2, pw, ph);
+                }
+                // lower curtain: a draped skirt with its own little scallops, carrying the name
+                const sg = ctx.createLinearGradient(0, yS, 0, H);
+                sg.addColorStop(0, '#b71d2a'); sg.addColorStop(1, '#6f0f1a');
+                ctx.fillStyle = sg; ctx.fillRect(-W, yS + drop * -0.6, W * 3, H - yS + 4);
+                ctx.strokeStyle = 'rgba(70,6,14,0.5)'; ctx.lineWidth = 5;
+                for (let x = -20; x < W + 40; x += 34) { ctx.beginPath(); ctx.moveTo(x, yS + drop * -0.6 + dep * 0.5); ctx.quadraticCurveTo(x + 7 * Math.sin(t * 0.05 + x), (yS + H) / 2, x + 3, H); ctx.stroke(); }
+                vsValance(left ? -10 : x0 - 40, left ? x1 + 60 : W + 10, yS + drop * -0.6, dep * 0.62, Math.max(3, Math.round((x1 - x0) / 90)), t, 9);
+                {
+                    const ty = (yS + H) / 2 + dep * 0.3;
+                    const a0 = left ? 0 : edge(cx0, ty, 1), a1 = left ? edge(cx0, ty, -1) : W;
+                    vsText(left ? 'BIRD' : B.name, (a0 + a1) / 2, ty, clamp(H * 0.095, 20, 64), (a1 - a0) * 0.8, t, { delay: 26, stagger: 2 });
+                }
+                // top curtain and the drape pulled back at the outer edge
+                const topX0 = left ? -10 : edge(cx0, 0, 1) - 20, topX1 = left ? edge(cx0, 0, -1) + 20 : W + 10;
+                ctx.save(); ctx.translate(left ? 0 : W, drop); ctx.scale(left ? 1 : -1, 1); vsDrape(yS + 8, clamp(W * 0.07, 34, 74), t); ctx.restore();
+                vsValance(topX0, topX1, drop, dep, Math.max(3, Math.round((topX1 - topX0) / 110)), t);
+                ctx.restore();
+            };
+            panel(true); panel(false);
+            // the slanted bar between them
+            const barIn = ease((t - 4) / 12);
+            if (barIn > 0) {
+                ctx.save();
+                ctx.globalAlpha = alpha * barIn;
+                const bar = (cx, e) => { ctx.beginPath(); ctx.moveTo(edge(cx, -10, -1) - e, -10); ctx.lineTo(edge(cx, -10, 1) + e, -10); ctx.lineTo(edge(cx, H + 10, 1) + e, H + 10); ctx.lineTo(edge(cx, H + 10, -1) - e, H + 10); ctx.closePath(); };
+                bar(cxB, 7); ctx.fillStyle = '#000000'; ctx.fill();
+                bar(cxB, 3); ctx.fillStyle = '#ffd23f'; ctx.fill();
+                bar(cxB, -3); ctx.fillStyle = '#141a26'; ctx.fill();
+                ctx.save(); bar(cxB, -3); ctx.clip();                                                              // chevrons racing up the bar
+                ctx.fillStyle = 'rgba(255,210,63,0.22)';
+                for (let y = -80 + (t * 5) % 80; y < H + 80; y += 80) { const xm = edge(cxB, y, 0); ctx.beginPath(); ctx.moveTo(xm - bw, y + 30); ctx.lineTo(xm + 14, y); ctx.lineTo(xm + bw + 20, y - 34); ctx.lineTo(xm + bw + 20, y - 4); ctx.lineTo(xm + 14, y + 30); ctx.lineTo(xm - bw, y + 60); ctx.closePath(); ctx.fill(); }
+                ctx.restore();
+                ctx.restore();
+            }
+            // "VS": slams in huge, then breathes and rocks
+            if (t >= 22) {
+                const s = t < 34 ? 4.2 - 3.2 * back((t - 22) / 12) : 1 + Math.sin(t * 0.18) * 0.045;
+                const size = clamp(Math.min(H * 0.2, W * 0.2), 44, 150);
+                const stretch = 1 + out * 1.6;
+                ctx.save();
+                ctx.globalAlpha = alpha * clamp((t - 22) / 5, 0, 1);
+                ctx.translate(cxB + (t < 34 ? rand(-3, 3) * (34 - t) / 6 : 0), H * 0.47);
+                ctx.rotate(-0.1 + Math.sin(t * 0.08) * 0.05);
+                ctx.transform(1, 0, -0.18 - out * 0.5, 1, 0, 0);
+                ctx.scale(s * stretch, s);
+                vsText('VS', 0, 0, size, 0, t, { wave: 0.05, wob: 0.07 });
+                ctx.restore();
+            }
+            // sparks and stars
+            ctx.globalAlpha = alpha;
+            for (const p of v.parts) {
+                const a = p.life / p.max, r = p.size * (0.5 + a * 0.5);
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = alpha * Math.min(1, a * 1.6);
+                ctx.fillStyle = p.col; ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.4;
+                ctx.beginPath(); for (let i = 0; i < 8; i++) { const rr = i % 2 ? r * 0.38 : r, an = i / 8 * 6.283; i ? ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : ctx.moveTo(Math.cos(an) * rr, Math.sin(an) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+            }
+            // camera flashes
+            for (const f of v.pops) {
+                const a = f.life / 9, r = f.r * (1.2 - a * 0.4);
+                const fg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+                fg.addColorStop(0, `rgba(255,255,255,${a})`); fg.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.globalAlpha = alpha; ctx.fillStyle = fg; ctx.fillRect(f.x - r, f.y - r, r * 2, r * 2);
+                ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(f.x - r * 1.3, f.y); ctx.lineTo(f.x + r * 1.3, f.y); ctx.moveTo(f.x, f.y - r * 1.3); ctx.lineTo(f.x, f.y + r * 1.3); ctx.stroke();
+            }
+            ctx.restore();
+            if (v.flash > 0) {                                           // full-screen flash
+                ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillStyle = `rgba(255,255,255,${clamp(v.flash, 0, 1) * 0.85})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
+        }
+
         function startBossGame(kind) {
             kind = kind || state.lastBossKind || 'crusher';
             setHint(false);
@@ -7494,7 +8993,8 @@
             state.status = 'GAMEOVER';
             state.deathFrame = state.frameCount;
             try { achDeath(res && res.cause); } catch (e) {}
-            const isBossDeath = boss.active || state.bossIncoming || (res && res.cause && String(res.cause).startsWith('CRUSHER'));
+            const bossBeaten = boss.active && (boss.state === 'DYING' || boss.state === 'DEFEATED');
+            const isBossDeath = !bossBeaten && (boss.active || state.bossIncoming || (res && res.cause && String(res.cause).startsWith('CRUSHER')));
             state.lastDeathWasBoss = isBossDeath;
             syncMoveButtons();
             deathAt = performance.now();
@@ -7567,6 +9067,16 @@
                     spawnGoreExplosion(bird.x, bird.y, 50, 0, -2.5, true);
                     break;
                 }
+                case 'LIGHTNING':
+                    bird.deathType = 'NORMAL';
+                    bird.velocity = -3;
+                    bird.vx = rand(-2, 2);
+                    bird.spin = rand(0.3, 0.5) * (Math.random() < 0.5 ? -1 : 1);
+                    sound.playBurn(); sound.playHit();
+                    addPopup(bird.x, bird.y - 24, 'ZAP!', 3);
+                    spawnGoreExplosion(bird.x, bird.y, 50, 0, -2.5, true);
+                    spawnFireSparks(bird.x, bird.y);
+                    break;
                 case 'PIRANHA_FIREBALL':
                     bird.deathType = 'NORMAL';
                     bird.velocity = -4.5;
@@ -7593,6 +9103,7 @@
                     sound.playHit();
                     spawnGoreExplosion(bird.x, bird.y, 24, -2, -2);
             }
+            if (bird.deathType === 'CUT_IN_HALF' && bird.bisectedParts) setupCutLinks();
 
             if (state.score > state.bestScore) {
                 state.bestScore = state.score;
@@ -7703,12 +9214,55 @@
 
         function isLandscape() { return window.innerWidth > window.innerHeight; }
 
+        // ---------- auto quality ----------
+        // If frames keep running slow, the canvas is rendered at a lower resolution (the picture is
+        // scaled up by the browser). Quality only steps down, a few seconds apart, and never mid-scene
+        // in a way that loses anything: the blood/gore layers are copied into the new size.
+        let renderQ = store.get('fb_perf', '0') === '1' ? 0.7 : 1;
+        const Q_STEPS = [1, 0.85, 0.7, 0.6];
+        let qIdx = 0, qT = 0, qN = 0, qCool = 180, qMin = 1e9;
+        function watchFrame(ms) {
+            if (state.manualPause || state.paused || document.hidden || ms <= 0) return;
+            if (qCool > 0) { qCool--; return; }
+            qT += ms; qN++; qMin = Math.min(qMin, ms);
+            if (qN < 90) return;
+            const avg = qT / qN, fast = qMin; qT = 0; qN = 0; qMin = 1e9;
+            const devPx = Math.min(window.devicePixelRatio || 1, 1.5);
+            // struggling = slower than ~45 fps AND clearly slower than this screen can go
+            // (a phone locked to 30 fps in low-power mode is steady, so it isn't punished)
+            if (avg > 21 && avg > fast * 1.3 && qIdx < Q_STEPS.length - 1 && devPx * Q_STEPS[qIdx + 1] >= 0.55) {
+                qIdx++; setRenderQ(Q_STEPS[qIdx]); qCool = 240;
+            }
+        }
+        function setRenderQ(q) {
+            renderQ = q;
+            const rect = document.getElementById('game-container').getBoundingClientRect();
+            const land = isLandscape();
+            const scale = land ? rect.height / LOGICAL_H : 1;
+            const devPx = Math.min(window.devicePixelRatio || 1, 1.5) * renderQ;
+            // keep what's already painted on the blood/gore layers
+            const keep = [bloodLayer, goreLayer].map(L => { const c = document.createElement('canvas'); c.width = L.width; c.height = L.height; c.getContext('2d').drawImage(L, 0, 0); return c; });
+            const bands = [[BL.y0, BL.y1], [GL.y0, GL.y1]];
+            const oldDpr = dpr;
+            canvas.width = Math.max(1, Math.round(rect.width * devPx));
+            canvas.height = Math.max(1, Math.round(rect.height * devPx));
+            ctx.setTransform(canvas.width / (rect.width / scale), 0, 0, canvas.height / (rect.height / scale), 0, 0);
+            dpr = canvas.width / state.width;
+            resizeBloodLayer();
+            [[bctx, BL], [gctx, GL]].forEach(([g, L], i) => {
+                g.save(); g.setTransform(1, 0, 0, 1, 0, 0); L.off = true;
+                g.drawImage(keep[i], 0, 0, g.canvas.width, g.canvas.height);
+                L.off = false; g.restore();
+                const f = dpr / oldDpr; L.y0 = bands[i][0] * f; L.y1 = bands[i][1] * f;
+            });
+        }
+
         function resizeCanvas() {
             const land = isLandscape();
             document.body.classList.toggle('landscape', land);
             const container = document.getElementById('game-container');
             const rect = container.getBoundingClientRect();
-            const devPx = Math.min(window.devicePixelRatio || 1, 1.5);   // capped: fill-rate is the main cost on hi-dpi screens
+            const devPx = Math.min(window.devicePixelRatio || 1, 1.5) * renderQ;   // capped: fill-rate is the main cost on hi-dpi screens; renderQ = auto quality
             const scale = land ? rect.height / LOGICAL_H : 1;
             dpr = devPx * scale;                                          // effective render scale used by every offscreen layer
             canvas.width = Math.max(1, Math.round(rect.width * devPx));
@@ -7759,13 +9313,27 @@
         document.addEventListener('fullscreenchange', () => { if (!fsElement()) weEnteredFullscreen = false; });
 
         window.addEventListener('keyup', e => { const d = KEY_DIR[e.code]; if (d) move[d] = false; });
-        window.addEventListener('blur', () => { move.left = move.right = false; });
+        window.addEventListener('blur', releaseMoves);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) releaseMoves(); });
 
         // on-screen move buttons (only visible during the boss fight); hold to move, tap elsewhere to flap
         [['move-left-btn', 'left'], ['move-right-btn', 'right']].forEach(([id, dir]) => {
             const b = document.getElementById(id);
-            const press = e => { e.preventDefault(); e.stopPropagation(); move[dir] = true; b.classList.add('pressed'); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
-            const release = e => { move[dir] = false; b.classList.remove('pressed'); };
+            const P = move.ptrs[dir];
+            const press = e => {
+                e.preventDefault(); e.stopPropagation();
+                if (e.button > 0) return;                                  // ignore right / middle mouse buttons
+                P.add(e.pointerId);
+                move[dir] = true; move.last = dir;
+                if (dir === 'left') move.tapL = 8; else move.tapR = 8;    // even the quickest tap moves the bird a little
+                b.classList.add('pressed');
+                try { b.setPointerCapture(e.pointerId); } catch (_) {}
+            };
+            const release = e => {
+                P.delete(e.pointerId);
+                if (P.size) return;                                        // another finger is still on this button
+                move[dir] = false; b.classList.remove('pressed');
+            };
             b.addEventListener('pointerdown', press);
             b.addEventListener('pointerup', release);
             b.addEventListener('pointercancel', release);
@@ -7782,7 +9350,7 @@
         const KEY_DIR = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
         window.addEventListener('keydown', e => {
             const d = KEY_DIR[e.code];
-            if (d) { e.preventDefault(); move[d] = true; return; }
+            if (d) { e.preventDefault(); if (!move[d]) move.last = d; move[d] = true; return; }
             if (e.code === 'Space') {
                 e.preventDefault();
                 if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -7839,6 +9407,8 @@
             { id: 'beat_dino',   icon: '🦖', name: 'The Meteor Was Late',         hint: "Do what the asteroid couldn't.",                               desc: 'Defeat Mr. Chompsalot.' },
             { id: 'beat_both',   icon: '🏆', name: "It's Over, Plukbering",       hint: 'Every enforcer, retired.',                                     desc: 'Defeat all three bosses.' },
             { id: 'combo5',      icon: '💥', name: 'Five Head',                   hint: "When the giant is seeing stars, dance on him. Don't touch the floor.", desc: 'Land a x5 combo on a dizzy boss.' },
+            { id: 'weather_all', icon: '🌦️', name: 'Touch Grass (It Was Wet)',    hint: 'Rain, thunder, wind, fog and snow. See every mood of the sky.', desc: 'Fly through all 5 kinds of weather.' },
+            { id: 'zapped',      icon: '⚡', name: 'Unlimited Power',             hint: 'Stand exactly where the sky points.',                          desc: 'Get struck by lightning.' },
             { id: 'night',       icon: '🌙', name: '3 AM Challenge',              hint: 'Stay out way past your bedtime.',                              desc: 'Keep flying until nightfall.' },
             { id: 'powerups',    icon: '⚡', name: 'Stonks',                      hint: 'Hoard ten shiny things.',                                      desc: 'Collect 10 power-ups.',            stat: 'powerups', goal: 10 },
             { id: 'fashion',     icon: '👕', name: 'Drip Check',                  hint: 'A bird needs at least three fits.',                           desc: 'Try 3 different skins.',           stat: 'skins',    goal: 3 },
@@ -7910,6 +9480,7 @@
             achBump('deaths');
             if (cause === 'PIRANHA_BITE' || cause === 'FIRE_PIRANHA_BITE') { achUnlock('eaten1'); achBump('eaten'); }
             else if (cause === 'PIRANHA_FIREBALL') achUnlock('burned');
+            else if (cause === 'LIGHTNING') achUnlock('zapped');
             else if (cause === 'THWOMP_IMPALE') achUnlock('impaled');
             else if (cause === 'CRUSHER_BODY' || cause === 'CRUSHER_SLAM') achUnlock('flattened');
             else if (cause === 'CRUSHER_LASER' || cause === 'CRUSHER_LASER_BLAST') achUnlock('sliced');
@@ -7956,6 +9527,10 @@
             const g = cv.getContext('2d');
             g.setTransform(1, 0, 0, 1, 0, 0);
             g.clearRect(0, 0, W, H);
+            bossIdleInto(g, kind, W, H, dp);
+        }
+        // draws one boss doing its idle animation into any canvas (W x H backing pixels, dp = pixels per art unit)
+        function bossIdleInto(g, kind, W, H, dp) {
             // draw with the real boss art: point ctx at the preview, pose the boss, then put everything back
             const saved = Object.assign({}, boss), realCtx = ctx, so = gloveOutline, sf = gloveFillCol;
             const t = performance.now() / 16.67;
@@ -8015,7 +9590,7 @@
         bossesModal.querySelectorAll('.boss-play').forEach(b => b.addEventListener('click', e => {
             e.stopPropagation();
             closeBosses();
-            startBossGame(b.dataset.kind);
+            startVsIntro(b.dataset.kind);          // only the Bosses menu gets the VS title card
         }));
         document.getElementById('restart-btn').addEventListener('click', e => {
             e.stopPropagation();
@@ -8065,6 +9640,8 @@
             });
             document.getElementById('gore-desc-text').textContent = GORE_INFO[state.goreLevel];
             paintToggle(document.getElementById('toggle-shake-btn'), state.screenShake);
+            paintToggle(document.getElementById('toggle-weather-btn'), state.weatherOn);
+            paintToggle(document.getElementById('toggle-perf-btn'), state.perf);
             paintToggle(document.getElementById('toggle-sound-btn'), !sound.muted);
             syncPauseIcon();
         }
@@ -8072,7 +9649,7 @@
             // the Game Over card sits under the settings sheet; tuck it away while it is open
             settingsReturn = !gameOverModal.classList.contains('hidden') ? 'over' : null;
             if (settingsReturn) gameOverModal.classList.add('hidden');
-            if (state.status === 'PLAYING') { state.paused = true; move.left = move.right = false; }
+            if (state.status === 'PLAYING') { state.paused = true; releaseMoves(); }
             syncSettingsUI();   // (a manual pause stays on underneath)
             settingsModal.classList.remove('hidden');
         }
@@ -8103,6 +9680,16 @@
             e.stopPropagation();
             state.screenShake = !state.screenShake; store.set('fb_shake', state.screenShake ? '1' : '0'); syncSettingsUI();
         });
+        document.getElementById('toggle-weather-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            state.weatherOn = !state.weatherOn; store.set('fb_weather', state.weatherOn ? '1' : '0'); syncSettingsUI();
+        });
+        document.getElementById('toggle-perf-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            state.perf = !state.perf; store.set('fb_perf', state.perf ? '1' : '0'); syncSettingsUI();
+            qIdx = 0; qCool = 180;
+            setRenderQ(state.perf ? 0.7 : 1);
+        });
         function setMuted(m) { sound.muted = m; store.set('fb_sound', m ? '0' : '1'); syncSettingsUI(); }
         document.getElementById('toggle-sound-btn').addEventListener('click', e => { e.stopPropagation(); setMuted(!sound.muted); });
         // the top-right round button is now Pause (sound lives in Settings)
@@ -8113,7 +9700,7 @@
             if (on && (state.status !== 'PLAYING' || state.paused)) return;      // only mid-run, and not under the settings sheet
             if (!on && !state.manualPause) return;
             state.manualPause = on; state.paused = on;
-            if (on) { move.left = move.right = false; document.querySelectorAll('.move-btn').forEach(b => b.classList.remove('pressed')); }
+            if (on) { releaseMoves(); }
             syncPauseIcon();
         }
         soundBtn.addEventListener('click', e => { e.stopPropagation(); setPause(!state.manualPause); });
