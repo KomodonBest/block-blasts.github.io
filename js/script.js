@@ -20,6 +20,7 @@ var is_fullscreen = false;
 })();
 // Games pinned to the top of every page's "Hot Game" list. Paths are relative to the site root.
 var PINNED_HOT_GAMES = [
+	{ name: 'Pixel Playground', page: 'play/pixel-playground.html', img: 'images/pixel-playground.png' },
 	{ name: 'Flappy Bird Arcade', page: 'play/flappy-bird-arcade.html', img: 'images/flappy-bird-arcade.png' },
 	{ name: 'Bayside Heat', page: 'play/bayside-heat.html', img: 'images/bayside-heat.png' }
 ];
