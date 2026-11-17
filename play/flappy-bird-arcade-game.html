@@ -202,12 +202,14 @@
         .boss-preview { width: 118px; height: 128px; flex: none; border: 3px solid var(--ink); border-radius: 12px; background: linear-gradient(#5fb4ee, #c9e8fb); display: block; }
         .boss-entry.glove .boss-preview { background: linear-gradient(#3b3f8f, #c96aa8); }
         .boss-entry.dino .boss-preview { background: linear-gradient(#f59e0b, #fde68a); }
+        .boss-entry.knight .boss-preview { background: linear-gradient(#34425c, #c3cfe0); }
         .boss-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
         .boss-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; font-weight: 700; color: var(--ink); }
         .boss-phrase { flex: 1; display: flex; align-items: center; margin: 0; font-size: 13px; font-style: italic; color: #3a4357; line-height: 1.25; }
         .diff { display: inline-block; padding: 0 7px; border: 2px solid var(--ink); border-radius: 8px; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
         .diff.easy { background: #5fc34a; } .diff.medium { background: #ffd23f; color: var(--ink); text-shadow: none; }
         .diff.insane { background: #e8463c; } .diff.demon { background: #3b0d4f; }
+        .diff.legend { background: linear-gradient(90deg, #c8202c, #e8b93a); }
         .boss-play { font-size: 15px; padding: 6px 10px; }
         #skins-modal { position: absolute; inset: 0; z-index: 30; background: rgba(18,26,41,.86); padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
         .skins-head { display: flex; justify-content: space-between; align-items: center; }
@@ -401,7 +403,7 @@
                 </div>
 
                 <button id="settings-done-btn" class="btn green small" style="font-size:16px;padding:8px 12px;margin-top:2px;">DONE</button>
-                <div id="game-version" style="font-size:12px;color:#7a8396;letter-spacing:.5px;">Version 4.07.1</div>
+                <div id="game-version" style="font-size:12px;color:#7a8396;letter-spacing:.5px;">Version 0.08.1</div>
             </div>
         </div>
 
@@ -435,7 +437,7 @@
                         <div class="boss-entry-body">
                             <canvas class="boss-preview" data-kind="crusher"></canvas>
                             <div class="boss-info">
-                                <div class="boss-stats"><span>HP: 100</span><span>Difficulty: <span class="diff medium">Medium</span></span></div>
+                                <div class="boss-stats"><span>HP: 200</span><span>Difficulty: <span class="diff medium">Medium</span></span></div>
                                 <p class="boss-phrase">"ON SHIFT. ALWAYS. 300 years and I still don't know why I crush things."</p>
                                 <button class="btn red small boss-play" data-kind="crusher">PLAY</button>
                             </div>
@@ -446,7 +448,7 @@
                         <div class="boss-entry-body">
                             <canvas class="boss-preview" data-kind="glove"></canvas>
                             <div class="boss-info">
-                                <div class="boss-stats"><span>HP: 100</span><span>Difficulty: <span class="diff insane">Insane</span></span></div>
+                                <div class="boss-stats"><span>HP: 250</span><span>Difficulty: <span class="diff insane">Insane</span></span></div>
                                 <p class="boss-phrase">"Hold still. You're smudging my work."</p>
                                 <button class="btn red small boss-play" data-kind="glove">PLAY</button>
                             </div>
@@ -457,9 +459,20 @@
                         <div class="boss-entry-body">
                             <canvas class="boss-preview" data-kind="dino"></canvas>
                             <div class="boss-info">
-                                <div class="boss-stats"><span>HP: 100</span><span>Difficulty: <span class="diff demon">Demon</span></span></div>
+                                <div class="boss-stats"><span>HP: 300</span><span>Difficulty: <span class="diff demon">Demon</span></span></div>
                                 <p class="boss-phrase">"I can't reach the snacks either. That's why I'm angry."</p>
                                 <button class="btn red small boss-play" data-kind="dino">PLAY</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="boss-entry knight">
+                        <div class="boss-entry-name">Sir Clanksalot</div>
+                        <div class="boss-entry-body">
+                            <canvas class="boss-preview" data-kind="knight"></canvas>
+                            <div class="boss-info">
+                                <div class="boss-stats"><span>HP: 350</span><span>Difficulty: <span class="diff legend">Legendary</span></span></div>
+                                <p class="boss-phrase">"None shall pass. Especially not birds."</p>
+                                <button class="btn red small boss-play" data-kind="knight">PLAY</button>
                             </div>
                         </div>
                     </div>
@@ -510,7 +523,7 @@
         //   BIG   (middle, 2 digits): a boss or something super big. Never resets.
         //   MINOR (first): a smaller feature, e.g. 2 more power-ups. Resets to 0 on a BIG update.
         //   PATCH (last):  a bug fix or performance patch. Resets to 0 on a BIG or MINOR update.
-        const GAME_VERSION = '4.07.1';
+        const GAME_VERSION = '0.08.1';
 
         const canvas = document.getElementById('gameCanvas');
         let ctx = canvas.getContext('2d', { alpha: false });   // 'let': the boss menu briefly points it at its preview canvases
@@ -624,6 +637,7 @@
             playSplat() { this.tone('sawtooth', 120, 20, 0.3, 0.5); this.noise(0.25, 0.5, 900); }
             playThunder(v = 1) { this.noise(1.4 * v + 0.3, 0.55 * v, 260); this.tone('sawtooth', 70, 30, 1.0 * v, 0.35 * v); }
             playWind() { this.noise(0.9, 0.18, 700); }
+            playClang() { this.tone('triangle', 1250, 820, 0.18, 0.22); this.tone('square', 620, 400, 0.08, 0.12); this.noise(0.12, 0.25, 5000); }
             playDrip() { this.tone('sine', 520 + Math.random() * 200, 160, 0.06, 0.07); }
             playSlash() { this.tone('triangle', 800, 150, 0.15, 0.5); this.noise(0.12, 0.3, 4000); }
             playLaserCharge() {
@@ -3790,6 +3804,7 @@
             const haze = cols[2];
             let budget = 1;   // one layer bake per frame at most
             mtnLayers.forEach((L, li) => {
+                if (li === 2) drawKnightBackdrop();                 // the knight hides behind the far mountains
                 if (!L.cvs[seg] && budget > 0) { renderMtnLayer(L, seg, li); budget--; }
                 else if (t > 0.02 && !L.cvs[next] && budget > 0) { renderMtnLayer(L, next, li); budget--; }
                 const A = L.cvs[seg] || L.cvs[next];
@@ -5097,8 +5112,10 @@
         //            BIG MR. CRUSHER (BOSS SYSTEM)
         // =====================================================
         const BOSS_MOVE_SPEED = 3.6;
+        // health per boss (a head/helmet bounce does 6-10 damage, more with a combo)
+        const BOSS_HP = { crusher: 200, glove: 250, dino: 300, knight: 350 };
         const bossHomeX = () => state.width - boss.w - (boss.kind === 'glove' ? 118 : 14);   // the glove's sleeve stays clear of the HUD buttons
-        const bossBox = () => boss.kind === 'dino' ? dinoBox() : boss.kind === 'glove'
+        const bossBox = () => boss.kind === 'knight' ? knightBox() : boss.kind === 'dino' ? dinoBox() : boss.kind === 'glove'
             ? { l: boss.x + 10, r: boss.x + boss.w - 10, t: boss.y + 8, b: boss.y + (boss.vis || boss.h) }
             : { l: boss.x + 8, r: boss.x + boss.w - 8, t: boss.y + 12, b: boss.y + boss.h };
         const bossAggro = () => 1 + (1 - boss.hp / boss.maxHp) * 0.55;   // gets quicker as he gets hurt
@@ -5116,8 +5133,8 @@
         }
 
         function pickBossKind() {
-            // cycle Crusher -> Mitt -> Chompsalot; the very first one is random
-            const order = ['crusher', 'glove', 'dino'];
+            // cycle Crusher -> Mitt -> Chompsalot -> Clanksalot; the very first one is random
+            const order = ['crusher', 'glove', 'dino', 'knight'];
             const i = order.indexOf(state.lastBossKind);
             return i < 0 ? pick(order) : order[(i + 1) % order.length];
         }
@@ -5129,8 +5146,9 @@
             boss.kind = kind;
             const glove = kind === 'glove';
             const dino = kind === 'dino';
-            boss.name = dino ? 'MR. CHOMPSALOT' : glove ? 'MR. MITT' : 'BIG MR. CRUSHER';
-            boss.w = glove ? MITT_W : dino ? 160 : BOSS_W; boss.h = glove ? MITT_H : dino ? 150 : BOSS_H;
+            const knight = kind === 'knight';
+            boss.name = knight ? 'SIR CLANKSALOT' : dino ? 'MR. CHOMPSALOT' : glove ? 'MR. MITT' : 'BIG MR. CRUSHER';
+            boss.w = glove ? MITT_W : (dino || knight) ? 160 : BOSS_W; boss.h = glove ? MITT_H : dino ? 150 : knight ? 300 : BOSS_H;
             boss.fist = boss.fistT = 0; boss.vis = boss.h; boss.fg = false; boss.rise = 0; boss.slam2 = false; boss.rain = [];
             boss.die = null;
             dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
@@ -5139,13 +5157,15 @@
                 const G = dinoGeo();
                 Object.assign(boss, { hx: G.restX, hy: G.restY, jaw: 0, lean: 0, bobY: 0, armT: 0, squish: 0, coughK: 0, snapNow: false, holding: false, aimSet: false });
             }
+            knightSwords = []; knightWaves = []; knightFlyers = [];
+            if (knight) Object.assign(boss, { ksc: clamp(state.width / 1000, 0.6, 1), kgy: undefined, kbx: undefined, kp: null, kpos: 'front', kback: 0, kfg: null, kcrush: null, kNext: undefined, armT: 0, kswish: 0, kblink: 0, rise: 0 });
             bossBalls = [];
             boss.active = true;
             state.bossIncoming = true;
             state.bossAnnounced = true;
             pipes = []; thwops = [];
-            boss.hp = boss.maxHp = 100;
-            boss.shownHp = 100;
+            boss.hp = boss.maxHp = BOSS_HP[kind] || 200;
+            boss.shownHp = boss.maxHp;
             boss.state = 'WARNING';
             boss.timer = 120;
             boss.atk = 0; boss.atkN = 0; boss.phase2 = false; boss.enrage = 0; boss.combo = 0;
@@ -5171,9 +5191,12 @@
             } else if (boss.kind === 'dino') {
                 cartoonStars(boss.hx, boss.hy - 30 * (boss.dsc || 1), 4, 3);
                 for (let k = 0; k < 5; k++) particles.push({ x: boss.hx + rand(-20, 20), y: boss.hy - 20, vx: rand(-2, 2), vy: -rand(1, 3), color: '#5fc34a', radius: rand(1.5, 2.5), alpha: 1, life: 0.5 });
+            } else if (boss.kind === 'knight') {
+                const G = knightGeo();
+                for (let k = 0; k < 8; k++) particles.push({ x: G.hx + rand(-24, 24) * G.S, y: G.hy - 34 * G.S, vx: rand(-4, 4), vy: -rand(1, 4), color: pick(['#fff3a0', '#ffd23f', '#ffffff']), radius: rand(1.4, 2.8), alpha: 1, life: 0.4 });
             } else rubble(boss.x + boss.w / 2, boss.y + boss.h / 2, 8, 5, 6);
             if (boss.hp <= 0) { defeatBoss(); return; }
-            if (!boss.phase2 && boss.hp <= 50) {
+            if (!boss.phase2 && boss.hp <= boss.maxHp / 2) {
                 boss.phase2 = true; boss.enrage = 100;
                 shakeScreen(); sound.playWarning(); state.hurtFlash = 6;
                 if (boss.kind === 'crusher') rubble(boss.x + boss.w / 2, boss.y + boss.h / 2, 14, 7, 8);
@@ -5186,9 +5209,11 @@
             boss.beamActive = false; boss.beamCharge = 0;
             slamWarner.active = false;
             bossLasers = []; bossSpikes = []; bossBalls = []; bossFalling = []; boss.fg = false;
-            if (boss.kind !== 'dino') boss.rise = 0;          // (the dino uses 'rise' for how far he's out of the ground)
+            if (boss.kind !== 'dino' && boss.kind !== 'knight') boss.rise = 0;          // (dino and knight use 'rise' for how far they're out of the ground)
+            knightSwords = []; knightWaves = []; knightFlyers = []; boss.kfg = null; boss.kcrush = null;
+            if (boss.kind === 'knight') { boss.kpos = 'front'; boss.kback = 0; boss.rise = Math.max(boss.rise || 0, 1); }
             boss.flash = 0;
-            const d = boss.die = { t: 0, pt: 0, phase: boss.kind === 'glove' ? 'lift' : boss.kind === 'dino' ? 'droop' : 'freeze', n: 0 };
+            const d = boss.die = { t: 0, pt: 0, phase: boss.kind === 'glove' ? 'lift' : boss.kind === 'dino' ? 'droop' : boss.kind === 'knight' ? 'stagger' : 'freeze', n: 0 };
             dinoClods = []; dinoWaves = []; dinoRings = []; dinoMarks = []; dinoGoo = []; dinoSlime = [];
             d.cx = boss.x + boss.w / 2; d.cy = boss.y + (boss.vis || boss.h) / 2;
             if (boss.kind === 'glove') {
@@ -5197,6 +5222,8 @@
                 boss.y = -999;                                   // the real hitbox leaves; the scene is drawn from boss.die
             } else if (boss.kind === 'dino') {
                 const G = dinoGeo(); d.cx = G.cx - 40 * G.S; d.cy = G.gy - 200 * G.S;
+            } else if (boss.kind === 'knight') {
+                const G = knightGeo(); d.cx = G.cx - 30 * G.S; d.cy = G.shY + 40 * G.S;
             } else {
                 d.cracks = [];
                 for (let k = 0; k < 9; k++) {
@@ -5212,8 +5239,8 @@
             }
             sound.playWarning();
             try {
-                achUnlock(boss.kind === 'glove' ? 'beat_mitt' : boss.kind === 'dino' ? 'beat_dino' : 'beat_crusher');
-                if (achState.unlocked.beat_mitt && achState.unlocked.beat_crusher && achState.unlocked.beat_dino) achUnlock('beat_both');
+                achUnlock(boss.kind === 'glove' ? 'beat_mitt' : boss.kind === 'dino' ? 'beat_dino' : boss.kind === 'knight' ? 'beat_knight' : 'beat_crusher');
+                if (achState.unlocked.beat_mitt && achState.unlocked.beat_crusher && achState.unlocked.beat_dino && achState.unlocked.beat_knight) achUnlock('beat_both');
             } catch (e) {}
             state.bossDefeatedThisRun = true;
             state.lastDeathWasBoss = false;
@@ -5794,6 +5821,7 @@
 
             if (boss.kind === 'glove') { updateGloveBoss(sf, gy, homeX, ag); return; }
             if (boss.kind === 'dino') { updateDinoBoss(sf, gy, ag); return; }
+            if (boss.kind === 'knight') { updateKnightBoss(sf, gy, ag); return; }
 
             switch (boss.state) {
                 case 'WARNING':
@@ -5828,7 +5856,7 @@
                     boss.phase += 0.06 * sf;
                     boss.y = boss.hoverBase + Math.sin(boss.phase) * 10;
                     boss.blastTimer -= sf;
-                    const isEnraged = boss.phase2 || boss.enrage > 0 || boss.hp <= 50;
+                    const isEnraged = boss.phase2 || boss.enrage > 0 || boss.hp <= boss.maxHp / 2;
                     const maxBlasts = isEnraged ? 8 : 6;
                     if (boss.blastTimer <= 0 && boss.blastCount < maxBlasts) {
                         boss.blastCount++; boss.blastTimer = (isEnraged ? 18 : 22) / ag;
@@ -5861,7 +5889,7 @@
                         sound.playSpikeThrow();
                         const base = Math.atan2(bird.y - (boss.y + 58), bird.x - (boss.x + 10));
                         const spd = 5 * (state.activePowerups.slowmo ? 0.65 : 1);
-                        const fan = (boss.phase2 || boss.hp <= 50) ? [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7] : [-0.5, -0.25, 0, 0.25, 0.5];   // enraged: 3 extra shurikens
+                        const fan = (boss.phase2 || boss.hp <= boss.maxHp / 2) ? [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7] : [-0.5, -0.25, 0, 0.25, 0.5];   // enraged: 3 extra shurikens
                         fan.forEach(o => {
                             bossSpikes.push({ x: boss.x + 10, y: boss.y + 58, vx: Math.cos(base + o) * spd, vy: Math.sin(base + o) * spd, rot: rand(0, 6.28), rs: rand(0.18, 0.3), size: 13 });
                         });
@@ -5953,7 +5981,7 @@
         //           the sky and then rains warned rocks back down.
         // =====================================================
         const MITT_W = 84, MITT_H = 98, MITT_S = 1.9;
-        const mittAnger = () => boss.phase2 || boss.hp <= 50;
+        const mittAnger = () => boss.phase2 || boss.hp <= boss.maxHp / 2;
 
         function mittShuriken(x, y, ang, spd, size, fg) {
             bossSpikes.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, rot: rand(0, 6.28), rs: rand(0.18, 0.3), size: size || 13, fg: !!fg });
@@ -6389,7 +6417,7 @@
                 shoulderX: cx - 70 * S, shoulderY: top + 74 * S };
         }
         const dinoBox = () => { const G = dinoGeo(); return { l: G.cx - 75 * G.S, r: G.cx + 85 * G.S, t: G.top, b: G.gy }; };
-        const dinoAnger = () => boss.phase2 || boss.hp <= 50;
+        const dinoAnger = () => boss.phase2 || boss.hp <= boss.maxHp / 2;
         const dinoTip = () => { const S = boss.dsc || 1; return { x: boss.hx - 86 * S, y: boss.hy + 12 * S }; };   // front of the snout
         const dinoMouth = () => { const S = boss.dsc || 1; return { x: boss.hx - 60 * S, y: boss.hy + 14 * S }; };
 
@@ -7251,8 +7279,828 @@
             }
         }
 
+        // =====================================================
+        //           SIR CLANKSALOT (THE KNIGHT BOSS)
+        // =====================================================
+        // A templar knight standing behind the floor: only his upper body shows. Bucket helm with a gold
+        // cross, white surcoat with a red cross over chainmail, a long sword and a heater shield.
+        //   SWORD: raises his sword -> a giant copy of it hangs in front of the screen and follows you ->
+        //          it plunges into the floor and more swords burst out of the ground -> his sword is STUCK
+        //          (bounce on his helmet!) -> he yanks it out and throws sword waves at you.
+        //   ENRAGED: crushes the map with his shield, then hides behind the mountains while flying swords
+        //          come in from both sides, track you for a moment and then dash straight ahead.
+        let knightSwords = [], knightWaves = [], knightFlyers = [];
+        const KN = {
+            steel: '#535a6b', steelDk: '#2c303b', steelLt: '#8e97aa', gold: '#e8b93a', goldDk: '#9c7012',
+            cloth: '#f3efe5', clothSh: '#cdc5b4', red: '#c8202c', redDk: '#861019',
+            leather: '#7a4a24', leatherDk: '#4b2b12', mail: '#9198a6', mailDk: '#5b6170'
+        };
+        let _mailPat = null;
+        function mailPattern() {
+            if (_mailPat) return _mailPat;
+            const c = document.createElement('canvas'); c.width = 8; c.height = 7;
+            const g = c.getContext('2d');
+            g.fillStyle = KN.mail; g.fillRect(0, 0, 8, 7);
+            g.strokeStyle = KN.mailDk; g.lineWidth = 1.1;
+            const ring = (x, y) => { g.beginPath(); g.ellipse(x, y, 2.3, 1.9, 0, 0, BTAU); g.stroke(); };
+            ring(2, 2); ring(6, 2); ring(0, 5.5); ring(4, 5.5); ring(8, 5.5);
+            g.fillStyle = 'rgba(255,255,255,0.35)';
+            [[1.3, 1.2], [5.3, 1.2], [3.3, 4.7], [7.3, 4.7]].forEach(([x, y]) => g.fillRect(x, y, 1, 0.8));
+            _mailPat = ctx.createPattern(c, 'repeat');
+            return _mailPat;
+        }
+
+        // ---------- geometry & pose ----------
+        function knightGeo() {
+            const S = boss.ksc || 1;
+            const gy = boss.kgy !== undefined ? boss.kgy : groundY();
+            const cx = boss.kbx !== undefined ? boss.kbx : state.width - 165 * S;
+            const rise = boss.rise === undefined ? 1 : boss.rise;
+            const P = boss.kp || knightIdle(boss.armT || 0);
+            const sink = (1 - rise) * 370 * S;
+            const shY = gy - 236 * S + sink + P.bob * S;
+            const ln = P.lean * S;
+            return { S, gy, cx, sink, shY, ln, P,
+                hx: cx + ln, hy: shY - 44 * S + P.helm * S,
+                shL: [cx - 72 * S + ln * 0.6, shY + 16 * S], shR: [cx + 72 * S + ln * 0.6, shY + 16 * S] };
+        }
+        function knightIdle(t) {
+            return { hx: -112, hy: 104, ang: 2.95, sx: 86, sy: 96, sang: 0.04, lean: 0, bob: Math.sin(t * 0.05) * 3, helm: 0, tilt: 0, swordOff: 0, shieldOff: 0, strain: 0 };
+        }
+        const knightBox = () => {
+            if (boss.kpos === 'back' || (boss.rise || 0) < 0.4) return { l: -9999, r: -9998, t: -9999, b: -9998 };
+            const G = knightGeo();
+            return { l: G.cx - 78 * G.S + G.ln * 0.5, r: G.cx + 80 * G.S, t: G.shY - 2 * G.S, b: G.gy };
+        };
+        const knightAnger = () => boss.phase2 || boss.hp <= boss.maxHp / 2;
+        function knightIK(sx, sy, hx, hy, L1, L2, bend) {
+            let dx = hx - sx, dy = hy - sy, d = Math.hypot(dx, dy) || 0.001;
+            const mx = L1 + L2 - 0.5;
+            if (d > mx) { hx = sx + dx / d * mx; hy = sy + dy / d * mx; dx = hx - sx; dy = hy - sy; d = mx; }
+            const a = Math.atan2(dy, dx), A = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
+            return { ex: sx + Math.cos(a + bend * A) * L1, ey: sy + Math.sin(a + bend * A) * L1, hx, hy };
+        }
+
+        // ---------- parts ----------
+        // sword held at (x, y): ang 0 = blade straight up, PI = straight down; sc = scale
+        function drawKnightSword(x, y, ang, sc, glow) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(sc, sc);
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            const ow = Math.max(1.6, 2.4 / Math.max(0.3, sc)) * Math.min(1, sc * 1.4);
+            if (glow) {
+                ctx.shadowColor = 'transparent';
+                ctx.strokeStyle = `rgba(190,225,255,${glow * 0.45})`; ctx.lineWidth = 16;
+                ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(0, -158); ctx.stroke();
+            }
+            // blade
+            ctx.beginPath();
+            ctx.moveTo(-6.5, -10); ctx.lineTo(-5, -140); ctx.lineTo(0, -160); ctx.lineTo(5, -140); ctx.lineTo(6.5, -10); ctx.closePath();
+            const bg = ctx.createLinearGradient(-7, 0, 7, 0);
+            bg.addColorStop(0, '#fbfcfe'); bg.addColorStop(0.45, '#dfe4ec'); bg.addColorStop(0.55, '#aeb6c4'); bg.addColorStop(1, '#c9d0db');
+            ctx.fillStyle = bg; ctx.fill();
+            ctx.strokeStyle = INK; ctx.lineWidth = ow; ctx.stroke();
+            ctx.strokeStyle = 'rgba(80,90,110,0.55)'; ctx.lineWidth = 1.6;                     // fuller
+            ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, -110); ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-3.6, -16); ctx.lineTo(-2.8, -132); ctx.stroke();
+            // crossguard
+            ctx.beginPath(); ctx.moveTo(-25, -6); ctx.quadraticCurveTo(-26, -13, -20, -13); ctx.lineTo(20, -13); ctx.quadraticCurveTo(26, -13, 25, -6);
+            ctx.lineTo(19, -8); ctx.lineTo(-19, -8); ctx.closePath();
+            ctx.fillStyle = KN.gold; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = ow; ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(-18, -12, 36, 1.4);
+            // grip + pommel
+            ctx.fillStyle = KN.leather; ctx.beginPath(); ctx.roundRect(-3.6, -8, 7.2, 24, 2); ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = KN.leatherDk; ctx.lineWidth = 1.2;
+            for (let yy = -4; yy < 15; yy += 4) { ctx.beginPath(); ctx.moveTo(-3.4, yy + 2); ctx.lineTo(3.4, yy); ctx.stroke(); }
+            ctx.fillStyle = KN.gold; ctx.strokeStyle = INK; ctx.lineWidth = ow;
+            ctx.beginPath(); ctx.arc(0, 20, 5.6, 0, BTAU); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(-1.6, 18.4, 1.7, 0, BTAU); ctx.fill();
+            ctx.restore();
+        }
+        function shieldPath(c) {
+            c.beginPath();
+            c.moveTo(-46, -50); c.quadraticCurveTo(0, -56, 46, -50);
+            c.bezierCurveTo(48, -6, 34, 34, 0, 64);
+            c.bezierCurveTo(-34, 34, -48, -6, -46, -50); c.closePath();
+        }
+        function drawKnightShield(x, y, ang, sc) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(sc, sc);
+            ctx.lineJoin = 'round';
+            shieldPath(ctx);
+            const g = ctx.createLinearGradient(-46, -50, 40, 60);
+            g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#e4e8ee'); g.addColorStop(1, '#b7bfcc');
+            ctx.fillStyle = g; ctx.fill();
+            ctx.save(); shieldPath(ctx); ctx.clip();
+            ctx.fillStyle = KN.red;                                                              // the red cross
+            ctx.fillRect(-8, -60, 16, 130); ctx.fillRect(-50, -24, 100, 15);
+            ctx.fillStyle = 'rgba(80,0,8,0.25)'; ctx.fillRect(4, -60, 4, 130); ctx.fillRect(-50, -12, 100, 3);
+            ctx.strokeStyle = 'rgba(40,50,70,0.35)'; ctx.lineWidth = 1.2;                         // scratches
+            ctx.beginPath(); ctx.moveTo(20, 10); ctx.lineTo(30, 4); ctx.moveTo(-30, 18); ctx.lineTo(-22, 26); ctx.moveTo(14, -36); ctx.lineTo(24, -40); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(-26, -24, 7, 20, 0.15, 0, BTAU); ctx.fill();
+            ctx.restore();
+            shieldPath(ctx); ctx.strokeStyle = INK; ctx.lineWidth = 3.4; ctx.stroke();
+            ctx.save(); ctx.scale(0.88, 0.9); shieldPath(ctx); ctx.restore();
+            ctx.strokeStyle = 'rgba(70,80,100,0.6)'; ctx.lineWidth = 1.6; ctx.stroke();           // inner rim
+            ctx.restore();
+        }
+        function drawKnightHelmet(x, y, sc, tilt, look, anger, dents) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(sc, sc);
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            const helm = () => { ctx.beginPath(); ctx.moveTo(-31, -40); ctx.quadraticCurveTo(0, -44, 31, -40); ctx.lineTo(34, 30); ctx.quadraticCurveTo(36, 40, 30, 41); ctx.quadraticCurveTo(0, 46, -30, 41); ctx.quadraticCurveTo(-36, 40, -34, 30); ctx.closePath(); };
+            helm();
+            const g = ctx.createLinearGradient(-34, 0, 34, 0);
+            g.addColorStop(0, KN.steelLt); g.addColorStop(0.32, KN.steel); g.addColorStop(1, KN.steelDk);
+            ctx.fillStyle = g; ctx.fill();
+            ctx.save(); helm(); ctx.clip();
+            ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(-24, -40, 6, 84);                // highlight down the left
+            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-40, 30, 80, 14);                     // rim in shadow
+            ctx.restore();
+            ctx.fillStyle = '#6b7385'; ctx.strokeStyle = INK; ctx.lineWidth = 2.2;                 // flat top plate
+            ctx.beginPath(); ctx.ellipse(0, -41, 31, 4.2, 0, 0, BTAU); ctx.fill(); ctx.stroke();
+            helm(); ctx.lineWidth = 3.4; ctx.stroke();
+            // eye slit
+            ctx.fillStyle = '#0c0f15';
+            ctx.beginPath(); ctx.roundRect(-27, -11, 22, 8, 3); ctx.fill();
+            ctx.beginPath(); ctx.roundRect(5, -11, 22, 8, 3); ctx.fill();
+            const ecol = anger ? '#ff4d3d' : '#fff3b0';
+            const lx = clamp(look || 0, -1, 1) * 3;
+            for (const ex of [-15 + lx, 15 + lx]) {
+                const eg = ctx.createRadialGradient(ex, -7, 0, ex, -7, 9);
+                eg.addColorStop(0, anger ? 'rgba(255,90,70,0.9)' : 'rgba(255,245,190,0.85)'); eg.addColorStop(1, 'rgba(255,200,120,0)');
+                ctx.fillStyle = eg; ctx.fillRect(ex - 9, -16, 18, 18);
+                ctx.fillStyle = ecol; ctx.beginPath(); ctx.ellipse(ex, -7, 3.2, 2.2, 0, 0, BTAU); ctx.fill();
+            }
+            // gold trim: nose strip down the middle, the frame of the slit, a cross on the brow and breathing holes
+            ctx.fillStyle = KN.gold; ctx.strokeStyle = KN.goldDk; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.roundRect(-4.5, -38, 9, 78, 2); ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = KN.gold; ctx.lineWidth = 2.2;
+            ctx.beginPath(); ctx.roundRect(-29, -13, 26, 12, 4); ctx.roundRect(3, -13, 26, 12, 4); ctx.stroke();
+            ctx.fillStyle = KN.gold; ctx.strokeStyle = KN.goldDk; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.rect(-10, -29, 20, 5); ctx.fill(); ctx.stroke();
+            for (const sx of [-17, 17]) {
+                for (const [dx, dy] of [[0, 0], [-4, 0], [4, 0], [0, -4], [0, 4]]) { ctx.fillStyle = '#0c0f15'; ctx.beginPath(); ctx.arc(sx + dx, 17 + dy, 1.3, 0, BTAU); ctx.fill(); }
+                ctx.strokeStyle = KN.gold; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(sx - 6, 17); ctx.lineTo(sx + 6, 17); ctx.moveTo(sx, 11); ctx.lineTo(sx, 23); ctx.stroke();
+            }
+            ctx.fillStyle = '#c9ced8';                                                            // rivets
+            for (let rx = -26; rx <= 26; rx += 10.4) { ctx.beginPath(); ctx.arc(rx, 35, 1.5, 0, BTAU); ctx.fill(); }
+            // dents from your bounces
+            ctx.strokeStyle = 'rgba(15,18,26,0.6)'; ctx.lineWidth = 1.6;
+            for (let i = 0; i < dents; i++) { const dx = [-18, 20, -8, 14, -22][i % 5], dy = [-30, -24, -36, -33, -20][i % 5]; ctx.beginPath(); ctx.arc(dx, dy, 4, 0.2, 2.6); ctx.stroke(); }
+            ctx.restore();
+        }
+
+        // ---------- the whole knight ----------
+        function drawKnight() {
+            if ((boss.rise === undefined ? 1 : boss.rise) <= 0.001 && !boss.die) return;
+            if (boss.kpos === 'back') return;                     // he is behind the mountains (drawn there)
+            const G = knightGeo(), S = G.S, P = G.P, t = boss.armT || 0, D = boss.state === 'DYING' || boss.state === 'DEFEATED' ? boss.die : null;
+            const anger = knightAnger();
+            const jit = P.strain ? (Math.random() - 0.5) * 3 * P.strain * S : 0;
+            if ((boss.rise === undefined ? 1 : boss.rise) > 0.001) {
+                ctx.save();
+                ctx.beginPath(); ctx.rect(-300, -900, state.width + 600, G.gy + 902); ctx.clip();   // everything below the floor line is hidden
+                ctx.translate(jit, 0);
+                ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+                const cx = G.cx, shY = G.shY, ln = G.ln;
+                // cape behind him, swaying
+                const sw = Math.sin(t * 0.04) * 6 * S;
+                ctx.beginPath();
+                ctx.moveTo(cx - 70 * S + ln * 0.6, shY + 4 * S);
+                ctx.quadraticCurveTo(cx - 112 * S + sw, shY + 120 * S, cx - 128 * S + sw * 1.6, G.gy + 40 * S);
+                ctx.lineTo(cx + 132 * S + sw * 1.6, G.gy + 40 * S);
+                ctx.quadraticCurveTo(cx + 116 * S + sw, shY + 120 * S, cx + 70 * S + ln * 0.6, shY + 4 * S); ctx.closePath();
+                const cg = ctx.createLinearGradient(cx - 130 * S, 0, cx + 130 * S, 0);
+                cg.addColorStop(0, '#e6e0d2'); cg.addColorStop(0.5, KN.clothSh); cg.addColorStop(1, '#b8b0a0');
+                ctx.fillStyle = cg; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3.2; ctx.stroke();
+                ctx.strokeStyle = 'rgba(110,100,85,0.45)'; ctx.lineWidth = 2;
+                for (const f of [-0.75, 0.8]) { ctx.beginPath(); ctx.moveTo(cx + f * 80 * S, shY + 40 * S); ctx.quadraticCurveTo(cx + f * 102 * S + sw, shY + 150 * S, cx + f * 116 * S + sw * 1.4, G.gy + 10); ctx.stroke(); }
+                // torso: chainmail
+                const torso = new Path2D();
+                torso.moveTo(cx - 64 * S + ln * 0.5, G.gy + 20 * S);
+                torso.lineTo(cx - 66 * S + ln * 0.55, shY + 70 * S);
+                torso.quadraticCurveTo(cx - 84 * S + ln * 0.6, shY + 6 * S, cx - 44 * S + ln * 0.8, shY - 4 * S);
+                torso.lineTo(cx + 44 * S + ln * 0.8, shY - 4 * S);
+                torso.quadraticCurveTo(cx + 84 * S + ln * 0.6, shY + 6 * S, cx + 66 * S + ln * 0.55, shY + 70 * S);
+                torso.lineTo(cx + 64 * S + ln * 0.5, G.gy + 20 * S); torso.closePath();
+                ctx.fillStyle = KN.mail; ctx.fill(torso);
+                ctx.save(); ctx.clip(torso); ctx.translate(cx, shY); ctx.scale(S, S); ctx.fillStyle = mailPattern(); ctx.fillRect(-120, -20, 240, 320); ctx.restore();
+                ctx.strokeStyle = INK; ctx.lineWidth = 3.4; ctx.stroke(torso);
+                // surcoat with the red cross
+                const coat = new Path2D();
+                coat.moveTo(cx - 72 * S + ln * 0.45, G.gy + 20 * S);
+                coat.lineTo(cx - 56 * S + ln * 0.55, shY + 76 * S);
+                coat.quadraticCurveTo(cx - 64 * S + ln * 0.62, shY + 14 * S, cx - 42 * S + ln * 0.8, shY + 2 * S);
+                coat.quadraticCurveTo(cx + ln * 0.85, shY + 34 * S, cx + 42 * S + ln * 0.8, shY + 2 * S);
+                coat.quadraticCurveTo(cx + 64 * S + ln * 0.62, shY + 14 * S, cx + 56 * S + ln * 0.55, shY + 76 * S);
+                coat.lineTo(cx + 72 * S + ln * 0.45, G.gy + 20 * S); coat.closePath();
+                const sg = ctx.createLinearGradient(cx - 72 * S, 0, cx + 72 * S, 0);
+                sg.addColorStop(0, '#ffffff'); sg.addColorStop(0.55, KN.cloth); sg.addColorStop(1, KN.clothSh);
+                ctx.fillStyle = sg; ctx.fill(coat);
+                ctx.save(); ctx.clip(coat);
+                const crx = cx + ln * 0.62, cry = shY + 74 * S;
+                ctx.fillStyle = KN.red;
+                ctx.beginPath(); ctx.moveTo(crx - 9 * S, shY + 22 * S); ctx.lineTo(crx + 9 * S, shY + 22 * S); ctx.lineTo(crx + 12 * S, G.gy - 70 * S); ctx.lineTo(crx - 12 * S, G.gy - 70 * S); ctx.closePath(); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(crx - 50 * S, cry - 22 * S); ctx.lineTo(crx + 50 * S, cry - 22 * S); ctx.lineTo(crx + 50 * S, cry - 4 * S); ctx.lineTo(crx - 50 * S, cry - 4 * S); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = KN.redDk; ctx.fillRect(crx + 5 * S, shY + 22 * S, 5 * S, G.gy - shY - 92 * S); ctx.fillRect(crx - 50 * S, cry - 8 * S, 100 * S, 4 * S);
+                ctx.strokeStyle = 'rgba(120,110,95,0.45)'; ctx.lineWidth = 2;                       // folds below the belt
+                for (const f of [-0.6, -0.15, 0.35, 0.75]) { ctx.beginPath(); ctx.moveTo(cx + f * 60 * S, G.gy - 56 * S); ctx.quadraticCurveTo(cx + f * 66 * S + 4 * S, G.gy - 20 * S, cx + f * 72 * S, G.gy + 10); ctx.stroke(); }
+                ctx.restore();
+                ctx.strokeStyle = INK; ctx.lineWidth = 3.4; ctx.stroke(coat);
+                // red on the shoulders, the strap across his chest, the belt with its buckle
+                ctx.fillStyle = KN.red; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
+                for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + sx * 64 * S + ln * 0.6, shY + 8 * S, 15 * S, 9 * S, sx * 0.5, 0, BTAU); ctx.fill(); ctx.stroke(); }
+                ctx.strokeStyle = INK; ctx.lineWidth = 12 * S; ctx.beginPath(); ctx.moveTo(cx - 52 * S + ln * 0.8, shY + 4 * S); ctx.lineTo(cx + 60 * S + ln * 0.5, G.gy - 64 * S); ctx.stroke();
+                ctx.strokeStyle = KN.leather; ctx.lineWidth = 8 * S; ctx.stroke();
+                ctx.fillStyle = KN.leather; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+                ctx.beginPath(); ctx.rect(cx - 70 * S + ln * 0.45, G.gy - 70 * S, 140 * S, 12 * S); ctx.fill(); ctx.stroke();
+                ctx.strokeStyle = KN.gold; ctx.lineWidth = 3 * S;
+                ctx.beginPath(); ctx.roundRect(cx - 16 * S + ln * 0.45, G.gy - 73 * S, 16 * S, 18 * S, 3 * S); ctx.stroke();
+                ctx.fillStyle = KN.leather; ctx.strokeStyle = INK; ctx.lineWidth = 2.2;                  // belt end hanging down
+                ctx.beginPath(); ctx.roundRect(cx - 4 * S + ln * 0.45, G.gy - 62 * S, 9 * S, 40 * S, 3 * S); ctx.fill(); ctx.stroke();
+                // mail coif around the neck, then the helmet (or the empty neck once it pops off)
+                ctx.fillStyle = KN.mail; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+                ctx.beginPath(); ctx.ellipse(G.hx, shY - 2 * S, 38 * S, 14 * S, 0, 0, BTAU); ctx.fill();
+                ctx.save(); ctx.clip(); ctx.translate(G.hx, shY); ctx.scale(S, S); ctx.fillStyle = mailPattern(); ctx.fillRect(-50, -20, 100, 40); ctx.restore();
+                ctx.stroke();
+                if (D && D.helm) {
+                    ctx.fillStyle = '#07090d'; ctx.beginPath(); ctx.ellipse(G.hx, shY - 6 * S, 24 * S, 8 * S, 0, 0, BTAU); ctx.fill();
+                } else {
+                    const look = clamp((bird.x - G.hx) / 300, -1, 1);
+                    drawKnightHelmet(G.hx, G.hy, S, P.tilt || 0, boss.kblink > 0 ? 0 : look, anger && !D, Math.min(5, Math.floor((1 - (boss.hp || 1) / (boss.maxHp || 1)) * 5.6)));
+                }
+                // shield arm + shield
+                const LA = 62 * S, LB = 58 * S;
+                const arm = (sh, hx, hy, bend, front) => {
+                    const k = knightIK(sh[0], sh[1], hx, hy, LA, LB, bend);
+                    const seg = (x0, y0, x1, y1, w) => {
+                        ctx.strokeStyle = INK; ctx.lineWidth = w + 5 * S; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+                        ctx.strokeStyle = KN.mail; ctx.lineWidth = w; ctx.stroke();
+                        ctx.save(); ctx.translate(0, 0); ctx.strokeStyle = mailPattern(); ctx.lineWidth = w; ctx.stroke(); ctx.restore();
+                    };
+                    seg(sh[0], sh[1], k.ex, k.ey, 25 * S);
+                    seg(k.ex, k.ey, k.hx, k.hy, 22 * S);
+                    // leather bracer and gauntlet
+                    const bx = k.ex + (k.hx - k.ex) * 0.38, by = k.ey + (k.hy - k.ey) * 0.38;
+                    ctx.strokeStyle = INK; ctx.lineWidth = 27 * S; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(k.hx, k.hy); ctx.stroke();
+                    ctx.strokeStyle = KN.leather; ctx.lineWidth = 22 * S; ctx.stroke();
+                    ctx.strokeStyle = 'rgba(255,220,180,0.25)'; ctx.lineWidth = 5 * S; ctx.beginPath(); ctx.moveTo(bx - 4 * S, by - 4 * S); ctx.lineTo(k.hx - 4 * S, k.hy - 4 * S); ctx.stroke();
+                    ctx.fillStyle = KN.steelDk; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;                // elbow cop
+                    ctx.beginPath(); ctx.arc(k.ex, k.ey, 11 * S, 0, BTAU); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(k.ex - 3 * S, k.ey - 3 * S, 3.5 * S, 0, BTAU); ctx.fill();
+                    return k;
+                };
+                const shH = [cx + P.sx * S + ln * 0.4, shY + P.sy * S];
+                const kR = arm(G.shR, shH[0], shH[1], -1);
+                if (!P.shieldOff) drawKnightShield(kR.hx - 4 * S, kR.hy - 4 * S, P.sang, S * 0.95);
+                ctx.fillStyle = KN.leatherDk; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+                ctx.beginPath(); ctx.arc(kR.hx, kR.hy, 11 * S, 0, BTAU); ctx.fill(); ctx.stroke();
+                // sword arm + sword (blade behind the fist)
+                const swH = [cx + P.hx * S + ln * 0.5, shY + P.hy * S];
+                const kL = knightIK(G.shL[0], G.shL[1], swH[0], swH[1], LA, LB, 1);
+                if (!P.swordOff) {
+                    if (boss.kswish > 0.05) {                                                              // swoosh trail of a swing
+                        ctx.strokeStyle = `rgba(230,240,255,${boss.kswish * 0.6})`; ctx.lineWidth = 30 * S;
+                        const a0 = boss.kswA0, a1 = P.ang;
+                        ctx.beginPath(); ctx.arc(kL.hx, kL.hy, 110 * S, Math.min(a0, a1) - Math.PI / 2, Math.max(a0, a1) - Math.PI / 2); ctx.stroke();
+                    }
+                    drawKnightSword(kL.hx, kL.hy, P.ang, S, 0);
+                }
+                arm(G.shL, swH[0], swH[1], 1);
+                ctx.fillStyle = KN.leatherDk; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+                ctx.beginPath(); ctx.arc(kL.hx, kL.hy, 12 * S, 0, BTAU); ctx.fill(); ctx.stroke();
+                ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.6;
+                ctx.beginPath(); ctx.moveTo(kL.hx - 8 * S, kL.hy - 2 * S); ctx.lineTo(kL.hx + 8 * S, kL.hy - 2 * S); ctx.moveTo(kL.hx - 7 * S, kL.hy + 4 * S); ctx.lineTo(kL.hx + 7 * S, kL.hy + 4 * S); ctx.stroke();
+                boss._kHand = { x: kL.hx, y: kL.hy };
+                // strain marks while he tugs at his stuck sword
+                if (P.strain > 0.3) {
+                    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.4;
+                    for (let i = 0; i < 3; i++) { const a = -2.4 + i * 0.5, r0 = 48 * S, r1 = 60 * S; ctx.beginPath(); ctx.moveTo(G.hx + Math.cos(a) * r0, G.hy + Math.sin(a) * r0); ctx.lineTo(G.hx + Math.cos(a) * r1, G.hy + Math.sin(a) * r1); ctx.stroke(); }
+                    ctx.fillStyle = '#7cc8f5';
+                    const dy = (t * 2) % 30;
+                    ctx.beginPath(); ctx.ellipse(G.hx + 38 * S, G.hy - 10 * S + dy * S, 2.6 * S, 4 * S, 0, 0, BTAU); ctx.fill();
+                }
+                ctx.restore();
+            }
+            // death-scene props: his sword stuck in the ground, the dropped shield, the rolling helmet and the moth
+            if (D) {
+                if (D.sword) drawKnightSword(D.sword.x, D.sword.y, D.sword.ang, S, 0);
+                if (D.shield) drawKnightShield(D.shield.x, D.shield.y, D.shield.rot, S * 0.95);
+                if (D.helm) drawKnightHelmet(D.helm.x, D.helm.y, S, D.helm.rot, 0, false, 5);
+                if (D.moth) {
+                    const m = D.moth, fl = Math.sin(m.t * 0.9);
+                    ctx.save(); ctx.translate(m.x, m.y);
+                    ctx.fillStyle = '#c9b48a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); ctx.ellipse(-4, -1, 6, 3.5 * Math.abs(fl) + 0.6, -0.5, 0, BTAU); ctx.fill(); ctx.stroke();
+                    ctx.beginPath(); ctx.ellipse(4, -1, 6, 3.5 * Math.abs(fl) + 0.6, 0.5, 0, BTAU); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = '#5b4a30'; ctx.beginPath(); ctx.ellipse(0, 0, 1.6, 4, 0, 0, BTAU); ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+
+        // the giant sword in front of the screen, and the giant shield that crushes the map
+        function drawKnightForeground() {
+            if (!boss.active || boss.kind !== 'knight') return;
+            const S = boss.ksc || 1, F = boss.kfg;
+            if (F) {
+                const sc = 3.3 * S, solid = F.phase === 'plunge' || F.phase === 'stuck';
+                ctx.save();
+                ctx.globalAlpha = F.phase === 'aim' ? 0.6 + 0.1 * Math.sin(state.frameCount * 0.3) : F.phase === 'lock' ? (Math.floor(F.t / 3) % 2 ? 0.85 : 0.5) : F.phase === 'stuck' ? 0.62 : 0.92;
+                drawKnightSword(F.x + (F.phase === 'stuck' ? Math.sin(state.frameCount * 0.6) * F.wob : 0), F.tipY - 160 * sc, Math.PI, sc, solid ? 0 : 0.6);
+                ctx.restore();
+            }
+        }
+
+        function drawKnightStuff() {
+            if (boss.kind !== 'knight') return;
+            const S = boss.ksc || 1, gy = groundY(), W = state.width;
+            // aim marker for the giant sword
+            const F = boss.kfg;
+            if (F && (F.phase === 'aim' || F.phase === 'lock')) {
+                const on = F.phase === 'lock' ? Math.floor(F.t / 3) % 2 === 0 : true;
+                ctx.save(); ctx.globalAlpha = on ? 0.9 : 0.4;
+                ctx.strokeStyle = '#ff4d3d'; ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
+                ctx.beginPath(); ctx.moveTo(F.x, 40); ctx.lineTo(F.x, gy); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(255,77,61,0.35)'; ctx.beginPath(); ctx.ellipse(F.x, gy + 2, 34 * S, 7, 0, 0, BTAU); ctx.fill();
+                ctx.restore();
+            }
+            // swords bursting out of the floor
+            if (knightSwords.length) {
+                ctx.save(); ctx.beginPath(); ctx.rect(-50, -100, W + 100, gy + 101); ctx.clip();
+                for (const k of knightSwords) {
+                    if (k.h > 0.5) drawKnightSword(k.x, gy - k.h + 160 * 0.72 * S, 0, 0.72 * S, 0);
+                }
+                ctx.restore();
+                for (const k of knightSwords) {
+                    if (k.st === 'warn') { ctx.fillStyle = 'rgba(60,35,15,0.6)'; ctx.beginPath(); ctx.ellipse(k.x, gy + 2, 12 * S * (1 - k.t / 14), 3, 0, 0, BTAU); ctx.fill(); }
+                    else if (k.h > 0.5) {                                                                  // churned dirt at the base
+                        ctx.fillStyle = '#7a4c24'; ctx.strokeStyle = INK; ctx.lineWidth = 1.6;
+                        ctx.beginPath(); ctx.ellipse(k.x, gy + 1, 13 * S, 4.5 * S, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+                    }
+                }
+            }
+            // sword waves: glowing crescents
+            for (const w of knightWaves) {
+                const a = Math.atan2(w.vy, w.vx);
+                ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(a);
+                for (let i = 3; i >= 1; i--) {                                                             // after-images
+                    ctx.globalAlpha = 0.18 * (4 - i) / 3;
+                    ctx.fillStyle = '#bfe3ff';
+                    ctx.beginPath(); ctx.arc(-i * 10, 0, w.r, -1.25, 1.25); ctx.arc(-i * 10 - w.r * 0.45, 0, w.r * 0.85, 1.1, -1.1, true); ctx.closePath(); ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+                const g = ctx.createLinearGradient(0, -w.r, 0, w.r);
+                g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#d6efff'); g.addColorStop(1, '#ffffff');
+                ctx.beginPath(); ctx.arc(0, 0, w.r, -1.25, 1.25); ctx.arc(-w.r * 0.45, 0, w.r * 0.85, 1.1, -1.1, true); ctx.closePath();
+                ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = '#5aa9e6'; ctx.lineWidth = 2.4; ctx.stroke();
+                ctx.restore();
+            }
+            // flying swords
+            for (const f of knightFlyers) {
+                const L = 106 * S;
+                if (f.ph === 'dash') {
+                    ctx.save(); ctx.strokeStyle = 'rgba(220,235,255,0.55)'; ctx.lineWidth = 5 * S; ctx.lineCap = 'round';
+                    const dx = Math.sin(f.ang), dy = -Math.cos(f.ang);
+                    ctx.beginPath(); ctx.moveTo(f.x - dx * L * 0.4, f.y - dy * L * 0.4); ctx.lineTo(f.x - dx * L * 1.6, f.y - dy * L * 1.6); ctx.stroke(); ctx.restore();
+                }
+                const glow = f.ph === 'track' ? 0.4 + 0.3 * Math.sin(f.t * 0.4) : f.ph === 'lock' ? 1 : 0.2;
+                // held at the middle of the blade so it turns around its centre
+                const hx = f.x - Math.sin(f.ang) * L * 0.38, hy = f.y + Math.cos(f.ang) * L * 0.38;
+                drawKnightSword(hx, hy, f.ang, 0.66 * S, glow);
+                if (f.ph === 'lock') { const tx = f.x + Math.sin(f.ang) * L * 0.6, ty = f.y - Math.cos(f.ang) * L * 0.6; snowGlint(tx, ty, 9, 0.95); ctx.globalAlpha = 1; }
+            }
+            // the giant shield crushing the map
+            const C = boss.kcrush;
+            if (C) {
+                const sc = 2.3 * S, top = C.y - 64 * sc * 2 + 50 * sc;
+                if (C.phase === 'aim') {
+                    ctx.fillStyle = `rgba(20,25,40,${0.15 + 0.15 * Math.sin(C.t * 0.4)})`;
+                    ctx.beginPath(); ctx.ellipse(C.x, gy + 3, C.w * 0.5, 9, 0, 0, BTAU); ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,77,61,0.8)'; ctx.lineWidth = 3; ctx.setLineDash([8, 7]);
+                    ctx.beginPath(); ctx.rect(C.x - C.w / 2, 30, C.w, gy - 30); ctx.stroke(); ctx.setLineDash([]);
+                }
+                ctx.save(); ctx.globalAlpha = C.phase === 'aim' ? 0.55 : 1;
+                drawKnightShield(C.x, C.y - 64 * sc, 0, sc);
+                ctx.restore();
+                void top;
+            }
+        }
+
+        // the knight far away, behind the mountains (drawn between the mountain layers), hazy with distance
+        let _kBackCv = null;
+        function drawKnightBackdrop() {
+            if (!boss.active || boss.kind !== 'knight' || !(boss.kback > 0)) return;
+            const W = state.width, gy = groundY(), S0 = boss.ksc || 1;
+            const scale = 0.82, bw = 420 * S0, bh = 470 * S0;
+            if (!_kBackCv) _kBackCv = document.createElement('canvas');
+            const pw = Math.ceil(bw * dpr), ph = Math.ceil(bh * dpr);
+            if (_kBackCv.width !== pw || _kBackCv.height !== ph) { _kBackCv.width = pw; _kBackCv.height = ph; }
+            const g = _kBackCv.getContext('2d');
+            g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pw, ph);
+            g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            const real = ctx, saved = { kbx: boss.kbx, kgy: boss.kgy, kpos: boss.kpos, rise: boss.rise };
+            try {
+                ctx = g;
+                Object.assign(boss, { kbx: bw * 0.52, kgy: bh - 10 * S0, kpos: 'front', rise: 1 });
+                drawKnight();
+            } finally {
+                ctx = real; Object.assign(boss, saved);
+            }
+            // distance haze over the whole figure
+            g.globalCompositeOperation = 'source-atop';
+            g.fillStyle = `rgba(150,170,200,${0.38 + (state.nightAlpha || 0) * 0.3})`; g.fillRect(0, 0, bw, bh);
+            g.globalCompositeOperation = 'source-over';
+            const k = boss.kback, dw = bw * scale, dh = bh * scale;
+            const dx = W * 0.6 - dw / 2, dy = gy - 30 - dh + (1 - k) * dh * 0.75;
+            ctx.save(); ctx.globalAlpha = Math.min(1, k * 1.5);
+            ctx.drawImage(_kBackCv, dx, dy, dw, dh);
+            // his eyes still glow through the haze
+            const ex = dx + (bw * 0.52) * scale, ey = dy + (bh - 10 * S0 - 236 * S0 - 51 * S0) * scale;
+            for (const o of [-15, 15]) {
+                const gg = ctx.createRadialGradient(ex + o * S0 * scale, ey, 0, ex + o * S0 * scale, ey, 14 * scale);
+                gg.addColorStop(0, 'rgba(255,80,60,0.95)'); gg.addColorStop(1, 'rgba(255,80,60,0)');
+                ctx.fillStyle = gg; ctx.fillRect(ex + o * S0 * scale - 14, ey - 14, 28, 28);
+            }
+            ctx.restore();
+        }
+
+        // ---------- update ----------
+        function knightBump() {
+            // while his sword is stuck, his helmet is the weak spot: bounce on it for combo damage
+            if (state.status !== 'PLAYING' || boss.hitCool > 0) return;
+            const G = knightGeo(), S = G.S;
+            if (Math.hypot(bird.x - G.hx, bird.y - (G.hy - 30 * S)) > 46 * S) return;
+            boss.hitCool = 24;
+            bird.velocity = -7.4;
+            bird.y = Math.min(bird.y, G.hy - 64 * S);
+            boss.combo++;
+            const gain = Math.min(boss.combo, 5);
+            state.score += state.activePowerups.multiplier ? gain * 2 : gain;
+            updateHUD();
+            addPopup(bird.x, bird.y - 22, '+' + gain, gain);
+            if (boss.combo >= 3) addPopup(bird.x, bird.y - 48, 'COMBO x' + boss.combo, 9);
+            if (boss.combo >= 5) achUnlock('combo5');
+            try { sound.playClang(); } catch (e) {}
+            for (let k = 0; k < 6; k++) particles.push({ type: 'star', x: G.hx + rand(-20, 20) * S, y: G.hy - 40 * S, vx: rand(-3, 3), vy: -rand(1.5, 4), rot: 0, vr: 0.3, size: rand(4, 7), color: '#fff3a0', alpha: 1, life: 0.5 });
+            boss.kp.helm += 10;
+            damageBoss(6 + Math.min(boss.combo, 4));
+        }
+        function knightFloorSwords(x0, n, gap, rage) {
+            const S = boss.ksc || 1, W = state.width;
+            const spots = [];
+            for (let i = 1; i <= n; i++) { spots.push(x0 - i * gap); spots.push(x0 + i * gap); }
+            spots.sort((a, b) => Math.abs(a - x0) - Math.abs(b - x0));
+            spots.forEach((x, i) => {
+                if (x < 14 || x > W - 14) return;
+                knightSwords.push({ x, h: 0, max: rand(80, 105) * S, st: 'wait', t: Math.floor(i / 2) * 5, hold: rage ? 120 : 90 });
+            });
+        }
+        function updateKnightBoss(sf, gy, ag) {
+            const W = state.width;
+            boss.ksc = boss.ksc || clamp(W / 1000, 0.6, 1);
+            const S = boss.ksc, anger = knightAnger(), slow = state.activePowerups.slowmo ? 0.65 : 1;
+            boss.armT = (boss.armT || 0) + sf;
+            const t = boss.armT;
+            if (!boss.kp) boss.kp = knightIdle(t);
+            if (boss.kswish > 0) boss.kswish = Math.max(0, boss.kswish - 0.08 * sf);
+            if (boss.kblink > 0) boss.kblink -= sf; else if (Math.random() < 0.004) boss.kblink = 6;
+            const T = knightIdle(t);                                            // this frame's target pose
+            let K = 0.14;
+            const G = knightGeo();
+
+            // ---- hazards ----
+            for (let i = knightSwords.length - 1; i >= 0; i--) {
+                const k = knightSwords[i];
+                if (k.st === 'wait') { if ((k.t -= sf) <= 0) { k.st = 'warn'; k.t = 0; } continue; }
+                k.t += sf;
+                if (k.st === 'warn') {
+                    if (Math.random() < 0.5) particles.push({ x: k.x + rand(-6, 6), y: gy - 2, vx: rand(-1.5, 1.5), vy: -rand(1, 3), color: pick(['#8b5a2b', '#6b4220']), radius: rand(1.4, 2.6), alpha: 1, life: 0.4 });
+                    if (k.t > 14) { k.st = 'up'; k.t = 0; try { sound.playSlash(); } catch (e) {} for (let q = 0; q < 6; q++) particles.push({ x: k.x, y: gy - 2, vx: rand(-3, 3), vy: -rand(2, 5), color: pick(['#8b5a2b', '#6b4220', '#5fc34a']), radius: rand(1.6, 3), alpha: 1, life: 0.5 }); }
+                } else if (k.st === 'up') { k.h = Math.min(k.max, k.h + 14 * sf); if (k.h >= k.max) { k.st = 'hold'; k.t = 0; } }
+                else if (k.st === 'hold') { if (k.t > k.hold) { k.st = 'down'; k.t = 0; } }
+                else { k.h -= 3 * sf; if (k.h <= 0) knightSwords.splice(i, 1); }
+            }
+            for (let i = knightWaves.length - 1; i >= 0; i--) {
+                const w = knightWaves[i];
+                w.x += w.vx * sf; w.y += w.vy * sf; w.age += sf;
+                if (Math.random() < 0.5) particles.push({ x: w.x, y: w.y + rand(-w.r, w.r) * 0.6, vx: -w.vx * 0.1, vy: rand(-0.5, 0.5), color: '#d6efff', radius: rand(1.2, 2.4), alpha: 0.9, life: 0.35 });
+                if (w.y >= gy - 4) { dustCloud(w.x, gy - 4, 2, ['#e9edf3', '#d3d9e2']); w.vy = 0; w.y = gy - 6; }
+                if (w.x < -80 || w.x > W + 80 || w.y < -80) knightWaves.splice(i, 1);
+            }
+            for (let i = knightFlyers.length - 1; i >= 0; i--) {
+                const f = knightFlyers[i];
+                f.t += sf;
+                if (f.ph === 'track') {                                         // follows the bird: turns toward it and creeps closer
+                    const want = Math.atan2(bird.x - f.x, -(bird.y - f.y));
+                    let d = want - f.ang; while (d > Math.PI) d -= BTAU; while (d < -Math.PI) d += BTAU;
+                    f.ang += clamp(d, -0.09, 0.09) * sf;
+                    f.x += Math.sin(f.ang) * 1.3 * slow * sf; f.y += -Math.cos(f.ang) * 1.3 * slow * sf;
+                    if (f.t > f.track) { f.ph = 'lock'; f.t = 0; try { sound.tone('triangle', 1400, 1900, 0.08, 0.12); } catch (e) {} }
+                } else if (f.ph === 'lock') {
+                    if (f.t > 10) { f.ph = 'dash'; f.t = 0; f.vx = Math.sin(f.ang) * 12.5 * slow; f.vy = -Math.cos(f.ang) * 12.5 * slow; try { sound.playSlash(); } catch (e) {} }
+                } else {                                                        // ...then flies straight on the way it was pointing
+                    f.x += f.vx * sf; f.y += f.vy * sf;
+                    if (f.y > gy - 6) { f.y = gy - 6; f.vx *= 0.2; f.vy = 0; f.ph = 'stuck'; f.t = 0; dustCloud(f.x, gy - 4, 2); try { sound.playHit(); } catch (e) {} }
+                }
+                if (f.ph === 'stuck' && f.t > 50) { knightFlyers.splice(i, 1); continue; }
+                if (f.x < -120 || f.x > W + 120 || f.y < -120) knightFlyers.splice(i, 1);
+            }
+            // giant sword in front of the screen
+            const F = boss.kfg;
+            if (F) {
+                F.t += sf;
+                if (F.phase === 'aim') { F.x += (clamp(bird.x, 30, W - 30) - F.x) * 0.12 * sf; F.tipY = Math.min(F.tipY + 6 * sf, gy * 0.42); if (F.t > (anger ? 46 : 60)) { F.phase = 'lock'; F.t = 0; sound.playWarning(); } }
+                else if (F.phase === 'lock') { if (F.t > 14) { F.phase = 'plunge'; F.t = 0; F.vy = 6; } }
+                else if (F.phase === 'plunge') {
+                    F.vy += 3.2 * sf; F.tipY += F.vy * sf;
+                    if (F.tipY >= gy + 30 * S) {
+                        F.tipY = gy + 30 * S; F.phase = 'stuck'; F.t = 0; F.wob = 3;
+                        shakeScreen(); try { sound.playClang(); sound.playHit(); } catch (e) {}
+                        addPopup(F.x, gy - 70, 'CLANG!', 9);
+                        dustCloud(F.x, gy - 6, 8, ['#e2d3b5', '#d8c3a0', '#c9b38c']);
+                        spawnRocks(F.x, gy - 4, 8, 5, 7, { minR: 3, maxR: 7 });
+                        knightFloorSwords(F.x, anger ? 9 : 6, 52 * S, anger);
+                        bossGroundImpact && bossGroundImpact();
+                    }
+                }
+                else if (F.phase === 'stuck') { F.wob = Math.max(0.6, F.wob * 0.97); }
+                else if (F.phase === 'pull') { F.tipY -= (8 + F.t * 1.6) * sf; if (F.tipY < -40) boss.kfg = null; }
+            }
+            // giant shield
+            const C = boss.kcrush;
+            if (C) {
+                C.t += sf;
+                if (C.phase === 'aim') { C.x += (clamp(bird.x, C.w / 2, W - C.w / 2) - C.x) * 0.1 * sf; C.y = Math.min(C.y + 4 * sf, 120 * S); if (C.t > (C.n === 0 ? 50 : 34)) { C.phase = 'drop'; C.t = 0; C.vy = 2; } }
+                else if (C.phase === 'drop') {
+                    C.vy += 2.6 * sf; C.y += C.vy * sf;
+                    if (C.y >= gy + 8) {
+                        C.y = gy + 8; C.phase = 'hit'; C.t = 0;
+                        shakeScreen(); state.hurtFlash = Math.max(state.hurtFlash, 4);
+                        try { sound.playClang(); sound.playSplat(); } catch (e) {}
+                        addPopup(C.x, gy - 150 * S, 'CRUSH!', 9);
+                        dustCloud(C.x - C.w * 0.4, gy - 6, 6); dustCloud(C.x + C.w * 0.4, gy - 6, 6);
+                        spawnRocks(C.x, gy - 4, 12, 8, 8, { minR: 3, maxR: 8 });
+                        bossGroundImpact && bossGroundImpact();
+                    }
+                } else if (C.phase === 'hit') { if (C.t > 22) { C.phase = 'lift'; C.t = 0; } }
+                else if (C.phase === 'lift') { C.y -= (6 + C.t * 0.9) * sf; if (C.y < -40) { C.n++; if (C.n < C.max) { C.phase = 'aim'; C.t = 0; C.y = -20; } else boss.kcrush = null; } }
+            }
+
+            // ---- states ----
+            switch (boss.state) {
+                case 'WARNING':
+                    boss.rise = 0; boss.kpos = 'front';
+                    if (--boss.timer <= 0) { boss.state = 'ENTERING'; sound.playWarning(); }
+                    break;
+                case 'ENTERING': {                                              // rises up from behind the floor
+                    const first = (boss.rise || 0) === 0;
+                    boss.rise = Math.min(1, (boss.rise || 0) + 0.011 * sf);
+                    if (first) { shakeScreen(); try { sound.playClang(); } catch (e) {} dustCloud(G.cx, gy - 6, 8, ['#e2d3b5', '#d8c3a0']); }
+                    if (Math.floor(t) % 10 === 0) { try { sound.tone('square', 140 + Math.random() * 40, 90, 0.06, 0.08); } catch (e) {} dustCloud(G.cx + rand(-80, 80) * S, gy - 4, 1, ['#e2d3b5', '#d8c3a0']); }
+                    if (boss.rise >= 1) { boss.state = 'HOVER'; boss.timer = 60 / ag; addPopup(G.hx, G.hy - 70 * S, 'HALT!', 9); }
+                    break;
+                }
+                case 'HOVER':
+                    boss.timer -= sf;
+                    if (boss.timer <= 0) {
+                        if (anger && boss.kNext !== 'sword') { boss.state = 'SHIELD'; boss.sub = 'raise'; boss.timer = 30; boss.kNext = 'sword'; }
+                        else { boss.state = 'SWORD'; boss.sub = 'raise'; boss.timer = anger ? 26 : 36; boss.kNext = 'shield'; }
+                    }
+                    break;
+
+                case 'SWORD': {
+                    if (boss.sub === 'raise') {                                 // lifts the sword high over his head
+                        Object.assign(T, { hx: -40, hy: -96, ang: -0.25, lean: 6, helm: -6 });
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.sub = 'front';
+                            boss.kfg = { x: clamp(bird.x, 30, W - 30), tipY: -40, phase: 'aim', t: 0, vy: 0, wob: 0 };
+                            boss.kswish = 1; boss.kswA0 = -0.25;
+                            try { sound.playSlash(); } catch (e) {}
+                            addPopup(G.hx, G.hy - 70 * S, 'HAVE AT THEE!', 4);
+                        }
+                    } else if (boss.sub === 'front') {                          // ...and swings it toward the camera
+                        Object.assign(T, { hx: -150, hy: 20, ang: -1.5, lean: -16, helm: 4, swordOff: 1 });
+                        if (boss.kfg && boss.kfg.phase === 'stuck') {
+                            boss.sub = 'stuck'; boss.timer = anger ? 170 : 220; boss.combo = 0;
+                            addPopup(W / 2, gy * 0.3, 'SWORD STUCK! BOUNCE ON HIS HELMET!', 4);
+                        }
+                    } else if (boss.sub === 'stuck') {                          // tugs at it, helmet low: the weak spot
+                        Object.assign(T, { hx: -150, hy: 150, ang: -1.6, sx: 30, sy: 150, sang: 0.5, lean: -34, helm: 58, tilt: -0.22 + Math.sin(t * 0.5) * 0.04, swordOff: 1, strain: 1 });
+                        K = 0.2;
+                        if (bird.y + 12 >= gy - 20) boss.combo = 0;
+                        if (Math.floor(t) % 40 === 0) addPopup(G.hx - 30 * S, G.hy - 60 * S, pick(['HNNNGH!', 'COME ON!', '*grunt*']), 1);
+                        knightBump();
+                        boss.timer -= sf;
+                        if (boss.timer <= 0 && boss.state === 'SWORD') {
+                            boss.sub = 'pull'; boss.timer = 26; boss.combo = 0;
+                            if (boss.kfg) { boss.kfg.phase = 'pull'; boss.kfg.t = 0; }
+                            dustCloud(boss.kfg ? boss.kfg.x : G.cx, gy - 6, 6, ['#e2d3b5', '#d8c3a0']);
+                            try { sound.playClang(); } catch (e) {}
+                            addPopup(G.hx, G.hy - 80 * S, 'AHA!', 9);
+                        }
+                    } else if (boss.sub === 'pull') {                           // yanks it out; it flies back into his hand
+                        Object.assign(T, { hx: -50, hy: -60, ang: -0.6, lean: 4, helm: -4, swordOff: boss.timer > 10 ? 1 : 0 });
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) { boss.sub = 'wind'; boss.timer = 22; boss.waves = 0; }
+                    } else if (boss.sub === 'wind') {                           // winds up a swing...
+                        Object.assign(T, { hx: -20, hy: -84, ang: -0.95, lean: 10, helm: -6 });
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.sub = 'slash'; boss.timer = anger ? 12 : 16;
+                            boss.kswish = 1; boss.kswA0 = boss.kp.ang;
+                            const hx = boss._kHand ? boss._kHand.x : G.cx - 120 * S, hy = boss._kHand ? boss._kHand.y : G.shY;
+                            const sx = hx - 70 * S, sy = hy + 10 * S;
+                            const dx = bird.x - sx, dy = bird.y - sy, d = Math.hypot(dx, dy) || 1, sp = (anger ? 8.4 : 6.6) * slow;
+                            knightWaves.push({ x: sx, y: sy, vx: dx / d * sp, vy: dy / d * sp, r: 26 * S, age: 0 });
+                            try { sound.playSlash(); } catch (e) {}
+                            if (boss.waves % 2 === 0) addPopup(sx, sy - 30, pick(['HYAH!', 'SHING!', 'TAKE THAT!']), 4);
+                        }
+                    } else if (boss.sub === 'slash') {                          // ...and throws a sword wave at where you are
+                        Object.assign(T, { hx: -160, hy: 70, ang: -2.15, lean: -14, helm: 6 });
+                        K = 0.32;
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            if (++boss.waves >= (anger ? 5 : 3)) { boss.state = 'HOVER'; boss.timer = 70 / ag; }
+                            else { boss.sub = 'wind'; boss.timer = anger ? 14 : 18; }
+                        }
+                    }
+                    break;
+                }
+
+                case 'SHIELD': {                                                // enraged: crushes the map with his shield
+                    if (boss.sub === 'raise') {
+                        Object.assign(T, { sx: 40, sy: -110, sang: -0.3, lean: 6, helm: -6 });
+                        boss.timer -= sf;
+                        if (boss.timer <= 0) {
+                            boss.sub = 'crush';
+                            boss.kcrush = { x: clamp(bird.x, 110 * S, W - 110 * S), y: -20, w: 2.3 * S * 92, phase: 'aim', t: 0, n: 0, max: 3, vy: 0 };
+                            addPopup(G.hx, G.hy - 80 * S, 'BY MY SHIELD!', 9);
+                        }
+                    } else {
+                        Object.assign(T, { sx: 60, sy: -60, sang: 0, lean: -6, helm: 8, shieldOff: 1 });
+                        if (!boss.kcrush) { boss.state = 'RETREAT'; boss.sub = 'down'; boss.timer = 0; }
+                    }
+                    break;
+                }
+                case 'RETREAT': {                                               // ducks behind the floor... and shows up behind the mountains
+                    if (boss.sub === 'down') {
+                        boss.rise = Math.max(0, boss.rise - 0.03 * sf);
+                        if (Math.floor(t) % 6 === 0) dustCloud(G.cx + rand(-70, 70) * S, gy - 4, 1, ['#e2d3b5', '#d8c3a0']);
+                        if (boss.rise <= 0) { boss.kpos = 'back'; boss.kback = 0; boss.sub = 'up'; addPopup(W / 2, gy * 0.4, 'WHERE DID HE GO?', 1); }
+                    } else {
+                        Object.assign(T, { hx: -30, hy: -110, ang: 0.05, lean: 0, helm: -8 });
+                        boss.kback = Math.min(1, boss.kback + 0.02 * sf);
+                        if (boss.kback >= 1) {
+                            boss.state = 'FLY'; boss.timer = 0; boss.flyN = 0; boss.flyMax = 10;
+                            sound.playWarning(); addPopup(W / 2, gy * 0.32, 'SWORDS, ATTACK!', 9);
+                        }
+                    }
+                    break;
+                }
+                case 'FLY': {                                                   // flying swords from both sides of the map
+                    Object.assign(T, { hx: -30, hy: -110 + Math.sin(t * 0.1) * 6, ang: 0.05 + Math.sin(t * 0.07) * 0.1, lean: 0, helm: -8 });
+                    boss.timer -= sf;
+                    if (boss.timer <= 0 && boss.flyN < boss.flyMax) {
+                        const pair = boss.flyN % 4 === 3;                       // every fourth volley comes from both sides at once
+                        const sides = pair ? [-1, 1] : [boss.flyN % 2 ? 1 : -1];
+                        for (const sd of sides) {
+                            const x = sd < 0 ? -30 : W + 30, y = rand(60, gy - 70);
+                            knightFlyers.push({ x, y, ang: sd < 0 ? Math.PI / 2 : -Math.PI / 2, ph: 'track', t: 0, track: rand(50, 66), vx: 0, vy: 0 });
+                        }
+                        try { sound.tone('triangle', 600, 1200, 0.15, 0.12); } catch (e) {}
+                        boss.flyN++; boss.timer = 46 / ag;
+                    }
+                    if (boss.flyN >= boss.flyMax && knightFlyers.length === 0) { boss.state = 'RETURN'; boss.sub = 'down'; }
+                    break;
+                }
+                case 'RETURN': {
+                    if (boss.sub === 'down') {
+                        boss.kback = Math.max(0, boss.kback - 0.03 * sf);
+                        if (boss.kback <= 0) { boss.kpos = 'front'; boss.rise = 0; boss.sub = 'up'; try { sound.playClang(); } catch (e) {} dustCloud(G.cx, gy - 6, 6, ['#e2d3b5', '#d8c3a0']); }
+                    } else {
+                        boss.rise = Math.min(1, boss.rise + 0.025 * sf);
+                        if (Math.floor(t) % 8 === 0) dustCloud(G.cx + rand(-70, 70) * S, gy - 4, 1, ['#e2d3b5', '#d8c3a0']);
+                        if (boss.rise >= 1) { boss.state = 'HOVER'; boss.timer = 40 / ag; boss.kNext = 'sword'; }
+                    }
+                    break;
+                }
+
+                case 'DYING': {                                                 // drops his sword, wobbles, the helmet pops off: the armour was EMPTY
+                    const d = boss.die;
+                    d.t += sf; d.pt += sf;
+                    const go = ph => { d.phase = ph; d.pt = 0; };
+                    if (d.phase === 'stagger') {
+                        Object.assign(T, { hx: -100, hy: 130, ang: 2.6, sx: 70, sy: 140, sang: 0.5, lean: Math.sin(d.t * 0.2) * 22, helm: 10, tilt: Math.sin(d.t * 0.2) * 0.25, swordOff: 1 });
+                        if (!d.sword) {
+                            const h = boss._kHand || { x: G.cx - 110 * S, y: G.shY + 100 * S };
+                            d.sword = { x: h.x, y: h.y, vy: -3, ang: Math.PI * 0.9, stuck: false };
+                            addPopup(G.hx, G.hy - 80 * S, 'I... YIELD...', 4);
+                        }
+                        if (Math.floor(d.pt) % 12 === 0) cartoonStars(G.hx, G.hy - 50 * S, 2, 2);
+                        if (d.pt > 80) {
+                            go('pop');
+                            d.helm = { x: G.hx, y: G.hy, vx: -rand(2, 3.5), vy: -11, rot: 0, vr: -0.18, rest: false };
+                            d.moth = { x: G.hx, y: G.shY - 10 * S, t: 0 };
+                            try { sound.playBoing(); sound.playPoof(); } catch (e) {}
+                            for (let k = 0; k < 10; k++) plantPuff(G.hx + rand(-10, 10), G.shY - 10 * S, rand(-1.5, 1.5), -rand(0.5, 2.5), pick(['#cfc8b8', '#b8b0a0', '#e6e0d2']), 6, 14);
+                        }
+                    } else if (d.phase === 'pop') {
+                        Object.assign(T, { hx: -100, hy: 130, ang: 2.6, sx: 70, sy: 140, sang: 0.5, lean: 0, helm: 10, swordOff: 1 });
+                        if (Math.floor(d.pt) === 26) addPopup(G.hx, G.shY - 60 * S, '...IT WAS EMPTY?!', 9);
+                        if (d.pt > 70) { go('collapse'); d.shield = { x: G.cx + 86 * S, y: G.shY + 96 * S, vy: 0, rot: 0.04 }; }
+                    } else if (d.phase === 'collapse') {                        // the empty armour clatters down behind the floor
+                        Object.assign(T, { swordOff: 1, shieldOff: 1, lean: Math.sin(d.pt * 0.6) * 6 });
+                        boss.rise = Math.max(0, 1 - d.pt / 50);
+                        if (Math.floor(d.pt) % 7 === 0) { try { sound.tone('square', 200 + Math.random() * 300, 80, 0.07, 0.1); } catch (e) {} dustCloud(G.cx + rand(-60, 60) * S, gy - 4, 1, ['#e2d3b5', '#d8c3a0']); }
+                        if (boss.rise <= 0 && d.pt > 90) { go('done'); finishBossDeath(); }
+                    }
+                    // props fall with gravity
+                    if (d.sword && !d.sword.stuck) {
+                        d.sword.vy += 0.6 * sf; d.sword.y += d.sword.vy * sf; d.sword.ang += (Math.PI - d.sword.ang) * 0.1;
+                        const tipY = d.sword.y - Math.cos(d.sword.ang) * 160 * S;
+                        if (tipY >= gy + 26 * S) { d.sword.stuck = true; d.sword.ang = Math.PI * 0.96; try { sound.playClang(); } catch (e) {} dustCloud(d.sword.x, gy - 4, 3); }
+                    }
+                    if (d.shield) {
+                        d.shield.vy += 0.6 * sf; d.shield.y += d.shield.vy * sf;
+                        const bottom = d.shield.y + 60 * S * 0.95;
+                        if (bottom >= gy + 6) { d.shield.y = gy + 6 - 60 * S * 0.95; if (d.shield.vy > 3) { try { sound.playClang(); } catch (e) {} dustCloud(d.shield.x, gy - 4, 3); } d.shield.vy = -d.shield.vy * 0.25; if (Math.abs(d.shield.vy) < 1) d.shield.vy = 0; d.shield.rot += (0.28 - d.shield.rot) * 0.2; }
+                    }
+                    if (d.helm && !d.helm.rest) {
+                        const h = d.helm;
+                        h.vy += 0.5 * sf; h.x += h.vx * sf; h.y += h.vy * sf; h.rot += h.vr * sf;
+                        const floorY = gy - 40 * S;
+                        if (h.y >= floorY) {
+                            h.y = floorY;
+                            if (h.vy > 2) { h.vy = -h.vy * 0.45; h.vr *= -0.6; try { sound.playClang(); } catch (e) {} dustCloud(h.x, gy - 4, 2); }
+                            else { h.vy = 0; h.vx *= 0.9; h.vr = h.vx / (36 * S); }
+                            if (Math.abs(h.vx) < 0.05 && h.vy === 0) h.rest = true;
+                        }
+                        if (h.x < 40) { h.x = 40; h.vx = Math.abs(h.vx) * 0.5; }
+                    }
+                    if (d.moth) { const m = d.moth; m.t += sf; m.x += Math.sin(m.t * 0.13) * 1.6 - 0.4; m.y -= 0.9 + Math.sin(m.t * 0.21) * 0.6; }
+                    break;
+                }
+                case 'DEFEATED':
+                    boss.rise = 0;
+                    if (boss.die && boss.die.moth) { const m = boss.die.moth; m.t += sf; m.x += Math.sin(m.t * 0.13) * 1.6 - 0.4; m.y -= 0.9; }
+                    if (--boss.timer <= 0) endBossFight();
+                    break;
+            }
+
+            // springs: every pose value eases toward this frame's target
+            const P = boss.kp;
+            for (const key of ['hx', 'hy', 'sx', 'sy', 'lean', 'bob', 'helm', 'tilt', 'strain']) P[key] += (T[key] - P[key]) * K * sf;
+            let da = T.ang - P.ang; while (da > Math.PI) da -= BTAU; while (da < -Math.PI) da += BTAU;
+            P.ang += da * Math.min(1, K * 1.4) * sf;
+            P.sang += (T.sang - P.sang) * K * sf;
+            P.swordOff = T.swordOff; P.shieldOff = T.shieldOff;
+            boss.klook = clamp((bird.x - G.hx) / 300, -1, 1);
+        }
+
+        function knightCollisions() {
+            const gy = groundY(), S = boss.ksc || 1, st = boss.state;
+            if (st === 'WARNING' || st === 'DYING' || st === 'DEFEATED') return { hit: false };
+            const segHit = (x0, y0, x1, y1, r) => {
+                const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
+                const u = clamp(((bird.x - x0) * dx + (bird.y - y0) * dy) / l2, 0, 1);
+                return Math.hypot(bird.x - (x0 + dx * u), bird.y - (y0 + dy * u)) < r;
+            };
+            // his body and helmet (except while his sword is stuck: then the helmet is for bouncing)
+            if (boss.kpos !== 'back' && (boss.rise || 0) > 0.5) {
+                const G = knightGeo(), B = knightBox();
+                const stuck = st === 'SWORD' && boss.sub === 'stuck';
+                if (bird.x + 11 > B.l + 8 && bird.x - 11 < B.r && bird.y + 10 > B.t + 20) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_CRUSH' }; }
+                if (!stuck && Math.hypot(bird.x - G.hx, bird.y - G.hy) < 40 * S + 9) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_CRUSH' }; }
+            }
+            // the giant sword while it plunges
+            const F = boss.kfg;
+            if (F && F.phase === 'plunge') {
+                const half = 7 * 3.3 * S;
+                if (Math.abs(bird.x - F.x) < half + 9 && bird.y < F.tipY + 6) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_SLASH' }; }
+            }
+            for (const k of knightSwords) {
+                if (k.h > 4 && Math.abs(bird.x - k.x) < 7 * S + 9 && bird.y + 9 > gy - k.h) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_SLASH' }; }
+            }
+            for (const w of knightWaves) {
+                if (Math.hypot(bird.x - w.x, bird.y - w.y) < w.r * 0.8 + 8) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_SLASH' }; }
+            }
+            for (const f of knightFlyers) {
+                if (f.ph === 'track' && f.t < 12) continue;                     // just appearing at the edge
+                const L = 106 * S, dx = Math.sin(f.ang) * L * 0.62, dy = -Math.cos(f.ang) * L * 0.62;
+                if (segHit(f.x - dx, f.y - dy, f.x + dx, f.y + dy, 9)) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_SLASH' }; }
+            }
+            const C = boss.kcrush;
+            if (C && (C.phase === 'drop' || C.phase === 'hit')) {
+                const sc = 2.3 * S, top = C.y - 64 * sc - 52 * sc;
+                if (Math.abs(bird.x - C.x) < C.w * 0.46 && bird.y > top && bird.y < C.y) { if (!absorbHit()) return { hit: true, cause: 'KNIGHT_CRUSH' }; }
+            }
+            return { hit: false };
+        }
+
         function checkBossCollisions(box) {
             if (boss.active && boss.kind === 'dino') return dinoCollisions();
+            if (boss.active && boss.kind === 'knight') return knightCollisions();
             if (!boss.active || boss.state === 'DEFEATED' || boss.state === 'DYING' || boss.state === 'WARNING') return { hit: false };
             const bird_r = 11;
 
@@ -7363,6 +8211,7 @@
                 return;
             }
             if (boss.kind === 'dino') { drawDino(); return; }
+            if (boss.kind === 'knight') { drawKnight(); return; }
             if (boss.state === 'DEFEATED') return;
             const D = boss.state === 'DYING' ? boss.die : null;
             if (D && D.gone) return;
@@ -7494,6 +8343,7 @@
         function drawBossLasersAndSpikes() {
             if (!boss.active) return;
             drawDinoStuff();
+            drawKnightStuff();
             const gy = groundY();
 
             for (const F of bossFalling) {
@@ -7588,7 +8438,7 @@
                     const k = Math.min(1, (100 - boss.enrage) / 10), sc = 0.7 + 0.3 * k + Math.sin(boss.enrage * 0.5) * 0.03;
                     ctx.save(); ctx.translate(cx, state.height * 0.3); ctx.scale(sc, sc);
                     outlinedText('ENRAGED!', 0, 0, 42, '#ff6b6b', 10);
-                    outlinedText(boss.kind === 'glove' ? 'double slams & rock rain' : boss.kind === 'dino' ? 'frenzy bites & dirt rain' : 'rocks incoming', 0, 38, 20, '#fff', 5);
+                    outlinedText(boss.kind === 'glove' ? 'double slams & rock rain' : boss.kind === 'dino' ? 'frenzy bites & dirt rain' : boss.kind === 'knight' ? 'shield crush & flying swords' : 'rocks incoming', 0, 38, 20, '#fff', 5);
                     ctx.restore();
                 }
                 outlinedText(boss.name, cx, y - 12, 15, boss.phase2 ? '#ff9a9a' : '#fff', 4.5);
@@ -8028,6 +8878,7 @@
             weather.gust = 0; weather.gustWarn = 0; weather.gustT = 0; weather.flash = 0; weather.snowDepth = 0;
             rainDrops = []; flakes = []; windLines = []; fogBlobs = []; bolts = []; strikes = [];
             pipes.forEach(p => p.snow = 0);
+            weather.snowCells = null; weather.lastGO = undefined; weather.snowShift = 0;
         }
 
         function pickWeather() {
@@ -8112,16 +8963,7 @@
             }
 
             // --- snow ---
-            if (kind === 'snow' && k > 0) {
-                if (Math.random() < 3.2 * k) for (let i = 0; i < (state.perf ? 1 : 2); i++) flakes.push({ x: rand(-20, W + 60), y: -8, vy: rand(0.8, 1.8), r: rand(1.2, 3.2), ph: rand(0, BTAU) });
-                weather.snowDepth = Math.min(7, weather.snowDepth + 0.004 * k);
-                for (const pipe of pipes) pipe.snow = Math.min(9, (pipe.snow || 0) + 0.012 * k);
-            } else if (weather.snowDepth > 0) weather.snowDepth = Math.max(0, weather.snowDepth - 0.004);
-            for (let i = flakes.length - 1; i >= 0; i--) {
-                const f = flakes[i];
-                f.ph += 0.04; f.x += Math.sin(f.ph) * 0.6 - 1.2; f.y += f.vy;
-                if (f.y > gy + 3 || f.x < -30) flakes.splice(i, 1);
-            }
+            updateSnow(kind, k, gy);
 
             // --- wind gusts ---
             if (kind === 'wind' && k > 0) {
@@ -8209,28 +9051,197 @@
             ctx.fillRect(0, 0, state.width, state.height);
         }
 
-        function drawPipeSnow() {
+        // ---------- realistic snow ----------
+        // Flakes come in three depths: a faint far layer behind the pipes, a soft middle layer that actually
+        // lands (on the floor and on pipe rims), and a few big out-of-focus flakes right in front of the camera.
+        // Some of the larger ones are six-armed crystals that tumble as they fall.
+        let _snowSpr = null;
+        function snowSprites() {
+            if (_snowSpr) return _snowSpr;
+            const mk = (n, f) => { const c = document.createElement('canvas'); c.width = c.height = n; f(c.getContext('2d'), n); return c; };
+            const soft = mk(32, (g, n) => {
+                const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+                gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.9)');
+                gr.addColorStop(0.75, 'rgba(232,242,255,0.35)'); gr.addColorStop(1, 'rgba(225,238,255,0)');
+                g.fillStyle = gr; g.fillRect(0, 0, n, n);
+            });
+            const bokeh = mk(64, (g, n) => {
+                const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+                gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.7, 'rgba(245,250,255,0.42)');
+                gr.addColorStop(0.86, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');   // brighter rim, like an out-of-focus lens highlight
+                g.fillStyle = gr; g.fillRect(0, 0, n, n);
+            });
+            const crystal = mk(64, (g, n) => {
+                const c = n / 2, R = n * 0.42;
+                const glow = g.createRadialGradient(c, c, 0, c, c, R * 1.1);
+                glow.addColorStop(0, 'rgba(255,255,255,0.5)'); glow.addColorStop(1, 'rgba(220,235,255,0)');
+                g.fillStyle = glow; g.fillRect(0, 0, n, n);
+                g.translate(c, c); g.lineCap = 'round';
+                for (const [col, w] of [['rgba(170,200,240,0.7)', 3.4], ['rgba(255,255,255,1)', 1.8]]) {
+                    g.strokeStyle = col; g.lineWidth = w;
+                    for (let a = 0; a < 6; a++) {
+                        g.save(); g.rotate(a * Math.PI / 3);
+                        g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R);
+                        for (const [t, L] of [[0.38, 0.3], [0.62, 0.24], [0.82, 0.14]]) {
+                            g.moveTo(0, -R * t); g.lineTo(-R * L * 0.87, -R * t - R * L * 0.5);
+                            g.moveTo(0, -R * t); g.lineTo(R * L * 0.87, -R * t - R * L * 0.5);
+                        }
+                        g.stroke(); g.restore();
+                    }
+                }
+                g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, 3, 0, BTAU); g.fill();
+            });
+            return (_snowSpr = { soft, bokeh, crystal });
+        }
+        const SNOW_CELL = 4;
+        function snowAt(x) { const c = weather.snowCells; if (!c || !c.length) return 0; return c[clamp(Math.floor(x / SNOW_CELL), 0, c.length - 1)]; }
+        function spawnFlake(z) {
+            const W = state.width;
+            const f = { z, x: rand(-40, W + 120), y: -12, ph: rand(0, BTAU), ph2: rand(0, BTAU), rot: rand(0, BTAU), vr: rand(-0.04, 0.04), a: 1, type: 'soft' };
+            if (z === 0) { f.r = rand(0.7, 1.4); f.vy = rand(0.45, 0.8); f.a = rand(0.35, 0.65); }
+            else if (z === 1) { f.r = rand(1.4, 2.8); f.vy = rand(0.85, 1.5); f.a = rand(0.8, 1); if (Math.random() < 0.12) { f.type = 'crystal'; f.r = rand(3.5, 5.5); f.vy *= 0.8; } }
+            else { f.r = rand(7, 14); f.vy = rand(2.2, 3.4); f.a = rand(0.35, 0.6); f.type = Math.random() < 0.3 ? 'crystal' : 'bokeh'; f.vr = rand(-0.06, 0.06); f.y = -30; }
+            flakes.push(f);
+        }
+        function updateSnow(kind, k, gy) {
+            const W = state.width, perf = state.perf ? 0.5 : 1, snowing = kind === 'snow' && k > 0;
+            // gusty wind that drifts the whole snowfall
+            const t = state.frameCount;
+            weather.windX = -0.55 + Math.sin(t * 0.004) * 0.45 + Math.sin(t * 0.013 + 1) * 0.22;
+            if (snowing) {
+                const rate = [0.7, 1.0, 0.07];
+                for (let z = 0; z < 3; z++) { let n = rate[z] * k * perf; while (n > 0) { if (Math.random() < n) spawnFlake(z); n -= 1; } }
+            }
+            // the ground snow is a height field that scrolls with the ground
+            const cellsN = Math.ceil(W / SNOW_CELL) + 2;
+            if (!weather.snowCells || weather.snowCells.length !== cellsN) { weather.snowCells = new Array(cellsN).fill(weather.snowDepth || 0); weather.snowSeed = weather.snowSeed || 0; }
+            const cells = weather.snowCells;
+            const go = state.groundOffset;
+            if (weather.lastGO === undefined) weather.lastGO = go;
+            weather.snowShift = (weather.snowShift || 0) + Math.max(0, go - weather.lastGO); weather.lastGO = go;
+            while (weather.snowShift >= SNOW_CELL) { weather.snowShift -= SNOW_CELL; cells.shift(); weather.snowSeed++; const wi = cells.length + weather.snowSeed; cells.push(weather.snowDepth * (0.55 + 0.95 * (0.5 + 0.5 * Math.sin(wi * 0.13) * Math.sin(wi * 0.047 + 1.3)))); }
+            if (snowing) weather.snowDepth = Math.min(12, weather.snowDepth + 0.011 * k);
+            else if (weather.snowDepth > 0) weather.snowDepth = Math.max(0, weather.snowDepth - 0.004);
+            for (let i = 0; i < cells.length; i++) {
+                if (snowing) { const wi = i + (weather.snowSeed || 0); cells[i] = Math.min(20, cells[i] + 0.01 * k * (0.55 + 0.95 * (0.5 + 0.5 * Math.sin(wi * 0.13) * Math.sin(wi * 0.047 + 1.3)))); }   // drifts: some spots catch much more
+                else cells[i] = Math.max(0, cells[i] - 0.005);                 // melts once it stops
+            }
+            if (t % 3 === 0) for (let i = 1; i < cells.length - 1; i++) cells[i] += ((cells[i - 1] + cells[i + 1]) / 2 - cells[i]) * 0.12;   // settles into soft drifts
+            for (const pipe of pipes) {
+                if (snowing) pipe.snow = Math.min(11, (pipe.snow || 0) + 0.016 * k);
+                if (!pipe.snowN) { pipe.snowN = []; for (let i = 0; i < 7; i++) pipe.snowN.push(rand(0.75, 1.2)); pipe.icN = []; for (let i = 0; i < 5; i++) pipe.icN.push(rand(0.4, 1.1)); }
+            }
+            // move flakes: fall at their own speed, sway, ride the wind (closer flakes look faster)
+            let j = 0;
+            for (let i = 0; i < flakes.length; i++) {
+                const f = flakes[i], df = f.z === 0 ? 0.45 : f.z === 1 ? 1 : 1.9;
+                f.ph += 0.035; f.ph2 += 0.021;
+                f.x += weather.windX * df + Math.sin(f.ph) * 0.45 * df + Math.sin(f.ph2 * 1.7) * 0.18 * df;
+                f.y += f.vy + Math.sin(f.ph2) * 0.15;
+                f.rot += f.vr;
+                let keep = f.x > -60 && f.x < W + 160;
+                if (f.z === 1) {
+                    // lands on a pipe rim...
+                    for (const pipe of pipes) {
+                        const by = pipeBottomY(pipe) - (pipe.snow || 0);
+                        if (f.x > pipe.x - RIM_O - 2 && f.x < pipe.x + PIPE_W + RIM_O + 2 && f.y > by && f.y < by + 8) { pipe.snow = Math.min(11, (pipe.snow || 0) + 0.01); keep = false; break; }
+                    }
+                    // ...or on the ground, where it adds to the snow right there
+                    if (keep && f.y >= gy - snowAt(f.x) + 1) {
+                        const ci = Math.floor(f.x / SNOW_CELL);
+                        if (ci >= 0 && ci < cells.length) cells[ci] = Math.min(20, cells[ci] + f.r * 0.12);
+                        keep = false;
+                    }
+                } else if (f.z === 0 && f.y > gy - 6) keep = false;
+                else if (f.y > state.height + 40) keep = false;
+                if (keep) flakes[j++] = f;
+            }
+            flakes.length = j;
+        }
+        function drawFlakeLayer(z) {
+            if (!flakes.length) return;
+            const S = snowSprites(), na = state.nightAlpha || 0;
             ctx.save();
-            ctx.fillStyle = '#f6f9ff'; ctx.strokeStyle = 'rgba(120,140,170,0.6)'; ctx.lineWidth = 1;
+            for (const f of flakes) {
+                if (f.z !== z) continue;
+                ctx.globalAlpha = f.a * (1 - na * 0.35);
+                if (f.type === 'crystal') {
+                    const d = f.r * 2.4;
+                    ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.scale(1, 0.75 + 0.25 * Math.cos(f.ph * 0.7));   // tumbling
+                    ctx.drawImage(S.crystal, -d / 2, -d / 2, d, d); ctx.restore();
+                } else {
+                    const d = f.r * (f.type === 'bokeh' ? 2.2 : 2.6), img = f.type === 'bokeh' ? S.bokeh : S.soft;
+                    ctx.drawImage(img, f.x - d / 2, f.y - d / 2, d, d);
+                }
+            }
+            ctx.restore();
+        }
+        function snowGlint(x, y, s, a) {
+            ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.moveTo(x - s, y); ctx.lineTo(x, y - s * 0.22); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s * 0.22); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.22, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.22, y); ctx.closePath(); ctx.fill();
+        }
+        function drawPipeSnow() {
+            const na = state.nightAlpha || 0, gy = groundY();
+            ctx.save(); ctx.lineJoin = 'round';
             for (const pipe of pipes) {
                 const h = pipe.snow || 0;
-                if (h < 0.4) continue;
-                const by = pipeBottomY(pipe), L = pipe.x - RIM_O - 1, R = pipe.x + PIPE_W + RIM_O + 1;
-                ctx.beginPath();
-                ctx.moveTo(L, by + 1);
-                ctx.quadraticCurveTo(L - 1, by - h * 0.6, L + 6, by - h * 0.8);
-                ctx.quadraticCurveTo((L + R) / 2, by - h * 1.25, R - 6, by - h * 0.8);
-                ctx.quadraticCurveTo(R + 1, by - h * 0.6, R, by + 1);
-                ctx.closePath(); ctx.fill(); ctx.stroke();
-                // a few icicles hanging off the upper pipe
-                if (h > 3) {
-                    ctx.beginPath();
-                    for (let i = 0; i < 3; i++) {
-                        const ix = L + 8 + i * (R - L - 16) / 2, il = 3 + h * 0.5 * (0.6 + 0.4 * Math.sin(ix));
-                        ctx.moveTo(ix - 2, pipe.top); ctx.lineTo(ix, pipe.top + il); ctx.lineTo(ix + 2, pipe.top);
+                if (h < 0.3 || !pipe.snowN) continue;
+                const by = pipeBottomY(pipe), L = pipe.x - RIM_O - 3, R = pipe.x + PIPE_W + RIM_O + 3, wdt = R - L, N = pipe.snowN;
+                // frost creeping over the pipe bodies
+                const fr = Math.min(1, h / 6) * 0.22;
+                const fg = ctx.createLinearGradient(pipe.x, 0, pipe.x + PIPE_W, 0);
+                fg.addColorStop(0, `rgba(235,245,255,${fr})`); fg.addColorStop(0.5, `rgba(235,245,255,${fr * 0.3})`); fg.addColorStop(1, `rgba(200,220,255,${fr * 0.6})`);
+                ctx.fillStyle = fg;
+                ctx.fillRect(pipe.x, by + 14, PIPE_W, gy - by - 14);
+                ctx.fillRect(pipe.x, 0, PIPE_W, pipe.top - 14);
+                // contact shadow under the overhang
+                ctx.fillStyle = `rgba(40,60,100,${0.22 * Math.min(1, h / 3)})`;
+                ctx.fillRect(L + 3, by + 1, wdt - 6, 3);
+                // the cap: a lumpy mound that overhangs the rim on both sides
+                const top = x => { const u = (x - L) / wdt, k2 = Math.sin(u * Math.PI); const ni = u * (N.length - 1), i0 = Math.floor(ni), fr2 = ni - i0; const nz = N[i0] * (1 - fr2) + N[Math.min(N.length - 1, i0 + 1)] * fr2; return by - h * (0.35 + 0.75 * Math.pow(k2, 0.6)) * nz; };
+                const cap = () => {
+                    ctx.beginPath(); ctx.moveTo(L, by + 2.5);
+                    ctx.quadraticCurveTo(L - 2.5, by - h * 0.25, L + 1, top(L + 1));
+                    for (let x = L + 4; x <= R - 4; x += 4) ctx.lineTo(x, top(x));
+                    ctx.quadraticCurveTo(R + 2.5, by - h * 0.25, R, by + 2.5);
+                    ctx.quadraticCurveTo((L + R) / 2, by + 4, L, by + 2.5); ctx.closePath();
+                };
+                const g = ctx.createLinearGradient(0, by - h * 1.3, 0, by + 3);
+                g.addColorStop(0, '#ffffff'); g.addColorStop(0.65, '#eef4fc'); g.addColorStop(1, '#bccde6');
+                cap(); ctx.fillStyle = g; ctx.fill();
+                ctx.save(); cap(); ctx.clip();
+                const side = ctx.createLinearGradient(L, 0, R, 0);                                          // light from the left
+                side.addColorStop(0, 'rgba(255,255,255,0.4)'); side.addColorStop(0.55, 'rgba(255,255,255,0)'); side.addColorStop(1, 'rgba(120,150,205,0.38)');
+                ctx.fillStyle = side; ctx.fillRect(L - 4, by - h * 1.5, wdt + 8, h * 1.5 + 6);
+                ctx.strokeStyle = 'rgba(140,165,210,0.45)'; ctx.lineWidth = 2.2;                            // soft rounded shading under the crest
+                ctx.beginPath(); for (let x = L + 3; x <= R - 3; x += 4) { const y = top(x) + 2.8; x === L + 3 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+                if (na > 0.02) { ctx.fillStyle = `rgba(30,50,110,${na * 0.4})`; ctx.fillRect(L - 4, by - h * 1.5, wdt + 8, h * 1.5 + 6); }
+                ctx.restore();
+                cap(); ctx.strokeStyle = 'rgba(105,130,170,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+                // twinkling sparkles
+                for (let i = 0; i < 4; i++) {
+                    const tw = Math.sin(state.frameCount * 0.06 + i * 2.1 + pipe.x * 0.05);
+                    if (tw > 0.75) { const x = L + 5 + (i * 0.27 + N[i] * 0.1) % 1 * (wdt - 10); snowGlint(x, top(x) + 2, 2.6 * (tw - 0.75) * 4, 0.9); }
+                }
+                ctx.globalAlpha = 1;
+                // icicles hanging off the upper pipe's rim: translucent, tapered, now and then a drip
+                if (h > 2.5) {
+                    const IC = pipe.icN;
+                    for (let i = 0; i < IC.length; i++) {
+                        const ix = pipe.x - RIM_O + 5 + i * (PIPE_W + RIM_O * 2 - 10) / (IC.length - 1);
+                        const il = (h - 2) * 2.2 * IC[i], iw = 2 + IC[i] * 1.6;
+                        if (il < 1.5) continue;
+                        const ig = ctx.createLinearGradient(ix - iw, 0, ix + iw, 0);
+                        ig.addColorStop(0, 'rgba(255,255,255,0.95)'); ig.addColorStop(0.5, 'rgba(205,230,255,0.75)'); ig.addColorStop(1, 'rgba(150,190,240,0.85)');
+                        ctx.fillStyle = ig; ctx.strokeStyle = 'rgba(110,140,185,0.55)'; ctx.lineWidth = 0.8;
+                        ctx.beginPath(); ctx.moveTo(ix - iw, pipe.top - 1); ctx.quadraticCurveTo(ix - iw * 0.4, pipe.top + il * 0.6, ix, pipe.top + il); ctx.quadraticCurveTo(ix + iw * 0.4, pipe.top + il * 0.6, ix + iw, pipe.top - 1); ctx.closePath(); ctx.fill(); ctx.stroke();
+                        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8;
+                        ctx.beginPath(); ctx.moveTo(ix - iw * 0.45, pipe.top + 1); ctx.lineTo(ix - iw * 0.15, pipe.top + il * 0.7); ctx.stroke();
+                        const dp = (state.frameCount * 0.012 + IC[i] * 7 + pipe.x * 0.01) % 1;                  // a bead of meltwater forms and drops
+                        if (dp < 0.6) { ctx.fillStyle = 'rgba(210,235,255,0.9)'; ctx.beginPath(); ctx.arc(ix, pipe.top + il + 1, 0.4 + dp * 1.4, 0, BTAU); ctx.fill(); }
+                        else { const fy = pipe.top + il + 1 + (dp - 0.6) * 160; if (fy < by - 2) { ctx.fillStyle = 'rgba(210,235,255,0.8)'; ctx.beginPath(); ctx.ellipse(ix, fy, 0.9, 1.6, 0, 0, BTAU); ctx.fill(); } }
                     }
-                    ctx.fillStyle = 'rgba(220,240,255,0.95)'; ctx.fill();
-                    ctx.fillStyle = '#f6f9ff';
                 }
             }
             ctx.restore();
@@ -8252,14 +9263,35 @@
         }
 
         function drawGroundSnow() {
-            const d = weather.snowDepth;
-            if (d < 0.3) return;
-            const gy = groundY(), W = state.width, off = state.groundOffset % 40;
+            const cells = weather.snowCells;
+            if (!cells || !cells.length) return;
+            let mx = 0; for (const v of cells) if (v > mx) mx = v;
+            if (mx < 0.3) return;
+            const gy = groundY(), W = state.width, sh = weather.snowShift || 0, na = state.nightAlpha || 0;
+            const X = i => i * SNOW_CELL - sh, Y = i => gy - cells[i] + 1;
+            const surf = () => {
+                ctx.moveTo(X(0), Y(0));
+                for (let i = 1; i < cells.length - 1; i++) ctx.quadraticCurveTo(X(i), Y(i), (X(i) + X(i + 1)) / 2, (Y(i) + Y(i + 1)) / 2);
+                ctx.lineTo(X(cells.length - 1), Y(cells.length - 1));
+            };
+            const body = () => { ctx.beginPath(); surf(); ctx.lineTo(W + 10, gy + 9); ctx.lineTo(-10, gy + 9); ctx.closePath(); };
             ctx.save();
-            ctx.fillStyle = '#f6f9ff';
-            ctx.beginPath(); ctx.moveTo(0, gy + 6);
-            for (let x = 0; x <= W + 40; x += 20) ctx.lineTo(x - off, gy - d * (0.8 + 0.35 * Math.sin((x - off) * 0.07 + 1)));
-            ctx.lineTo(W, gy + 6); ctx.closePath(); ctx.fill();
+            const g = ctx.createLinearGradient(0, gy - mx, 0, gy + 9);
+            g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#f1f6fd'); g.addColorStop(1, '#c6d5ec');
+            body(); ctx.fillStyle = g; ctx.fill();
+            ctx.save(); body(); ctx.clip();
+            // rounded volume: blue shadow just under the crest of every drift, brighter where it faces the light
+            ctx.translate(0, 3.2); ctx.beginPath(); surf(); ctx.strokeStyle = 'rgba(135,160,210,0.4)'; ctx.lineWidth = 3.5; ctx.stroke();
+            ctx.translate(0, -5); ctx.beginPath(); surf(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+            if (na > 0.02) { ctx.save(); body(); ctx.clip(); ctx.fillStyle = `rgba(30,50,110,${na * 0.45})`; ctx.fillRect(-10, gy - mx - 4, W + 20, mx + 16); ctx.restore(); }
+            ctx.beginPath(); surf(); ctx.strokeStyle = 'rgba(105,130,170,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+            // sparkles in the snow that twinkle in and out (fixed to the snow, so they scroll with it)
+            for (let i = 2; i < cells.length - 2; i += 3) {
+                if (cells[i] < 1.5) continue;
+                const wi = i + (weather.snowSeed || 0), ph = (wi * 12.9898) % 6.283, tw = Math.sin(state.frameCount * 0.05 + ph * 3);
+                if (tw > 0.82) snowGlint(X(i), Y(i) + 2 + (wi * 7 % 5), 1.8 + (tw - 0.82) * 14, 0.95 * (1 - na * 0.5));
+            }
             ctx.restore();
         }
 
@@ -8273,13 +9305,9 @@
                 for (const d of rainDrops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.vx * 1.4, d.y - d.vy * 1.4); }
                 ctx.stroke();
             }
-            // snow
-            if (flakes.length) {
-                ctx.fillStyle = 'rgba(255,255,255,0.92)';
-                ctx.beginPath();
-                for (const f of flakes) { ctx.moveTo(f.x + f.r, f.y); ctx.arc(f.x, f.y, f.r, 0, BTAU); }
-                ctx.fill();
-            }
+            // snow: middle layer, then the big blurry flakes right in front of the camera
+            drawFlakeLayer(1);
+            drawFlakeLayer(2);
             // wind streaks
             if (windLines.length) {
                 ctx.strokeStyle = INK; ctx.globalAlpha = 0.25; ctx.lineWidth = 4; ctx.lineCap = 'round';
@@ -8447,6 +9475,7 @@
 
             drawBackground();
             drawWeatherSky();
+            drawFlakeLayer(0);
             drawPiranhaPlants();
             drawPipes();
             drawPipeSnow();
@@ -8473,6 +9502,7 @@
             drawParticles();
             drawWeatherFront();
             drawMittForeground();
+            drawKnightForeground();
             drawBossHud();
             drawPopups();
             drawFourthWall();
@@ -8665,7 +9695,8 @@
         const VS_BOSS = {
             crusher: { name: 'BIG MR. CRUSHER', bg: ['#6d1626', '#e2564a'] },
             glove:   { name: 'MR. MITT',        bg: ['#33257f', '#c966a6'] },
-            dino:    { name: 'MR. CHOMPSALOT',  bg: ['#a94a06', '#fbbf24'] }
+            dino:    { name: 'MR. CHOMPSALOT',  bg: ['#a94a06', '#fbbf24'] },
+            knight:  { name: 'SIR CLANKSALOT',  bg: ['#26324a', '#9fb0c8'] }
         };
         function startVsIntro(kind) {
             sound.init();
@@ -9035,6 +10066,7 @@
                     spawnGoreExplosion(bird.x, gy - 4, 55, 0, -Math.min(8, Math.abs(bird.velocity)), true);
                     bakeRemains(bird.x, 0.9);
                     break;
+                case 'KNIGHT_CRUSH':
                 case 'CRUSHER_SLAM':
                 case 'CRUSHER_BODY':
                     bird.deathType = 'SPLAT';
@@ -9043,6 +10075,7 @@
                     spawnGoreExplosion(bird.x, gy - 4, 80, 0, -6, true);
                     bakeRemains(bird.x, 1.3);
                     break;
+                case 'KNIGHT_SLASH':
                 case 'CRUSHER_LASER':
                 case 'CRUSHER_LASER_BLAST':
                     bird.deathType = 'CUT_IN_HALF';
@@ -9405,7 +10438,8 @@
             { id: 'beat_crusher',icon: '🪨', name: 'Skill Issue (Theirs)',        hint: 'The wall that has been on shift for 300 years finally clocks out.', desc: 'Defeat Big Mr. Crusher.' },
             { id: 'beat_mitt',   icon: '🧤', name: 'Talk to the Hand',            hint: "Put the builder's glove back in the drawer.",                  desc: 'Defeat Mr. Mitt.' },
             { id: 'beat_dino',   icon: '🦖', name: 'The Meteor Was Late',         hint: "Do what the asteroid couldn't.",                               desc: 'Defeat Mr. Chompsalot.' },
-            { id: 'beat_both',   icon: '🏆', name: "It's Over, Plukbering",       hint: 'Every enforcer, retired.',                                     desc: 'Defeat all three bosses.' },
+            { id: 'beat_knight', icon: '🛡️', name: "Sir, This Is A Wendy's",      hint: 'Knock the lid off the tin can with a cross on his chest.',     desc: 'Defeat Sir Clanksalot.' },
+            { id: 'beat_both',   icon: '🏆', name: "It's Over, Plukbering",       hint: 'Every enforcer, retired.',                                     desc: 'Defeat all four bosses.' },
             { id: 'combo5',      icon: '💥', name: 'Five Head',                   hint: "When the giant is seeing stars, dance on him. Don't touch the floor.", desc: 'Land a x5 combo on a dizzy boss.' },
             { id: 'weather_all', icon: '🌦️', name: 'Touch Grass (It Was Wet)',    hint: 'Rain, thunder, wind, fog and snow. See every mood of the sky.', desc: 'Fly through all 5 kinds of weather.' },
             { id: 'zapped',      icon: '⚡', name: 'Unlimited Power',             hint: 'Stand exactly where the sky points.',                          desc: 'Get struck by lightning.' },
@@ -9482,8 +10516,8 @@
             else if (cause === 'PIRANHA_FIREBALL') achUnlock('burned');
             else if (cause === 'LIGHTNING') achUnlock('zapped');
             else if (cause === 'THWOMP_IMPALE') achUnlock('impaled');
-            else if (cause === 'CRUSHER_BODY' || cause === 'CRUSHER_SLAM') achUnlock('flattened');
-            else if (cause === 'CRUSHER_LASER' || cause === 'CRUSHER_LASER_BLAST') achUnlock('sliced');
+            else if (cause === 'CRUSHER_BODY' || cause === 'CRUSHER_SLAM' || cause === 'KNIGHT_CRUSH') achUnlock('flattened');
+            else if (cause === 'CRUSHER_LASER' || cause === 'CRUSHER_LASER_BLAST' || cause === 'KNIGHT_SLASH') achUnlock('sliced');
             else if (cause === 'GROUND') achUnlock('faceplant');
         }
         function renderAch() {
@@ -9547,6 +10581,10 @@
                     boss.sq = Math.sin(t * 0.08) * 0.035;
                     boss.x = (W / dp / sc - MITT_W) / 2;
                     boss.y = 22 + Math.sin(t * 0.06) * 5;
+                } else if (kind === 'knight') {
+                    g.setTransform(dp, 0, 0, dp, 0, 0);
+                    const LW = W / dp, LH = H / dp;
+                    Object.assign(boss, { kind: 'knight', ksc: 0.33, kgy: LH + 26, kbx: LW * 0.52, rise: 1, kp: null, kpos: 'front', armT: t, kswish: 0, kblink: 0, kfg: null, kcrush: null });
                 } else if (kind === 'dino') {
                     g.setTransform(dp, 0, 0, dp, 0, 0);
                     const LW = W / dp, LH = H / dp;
