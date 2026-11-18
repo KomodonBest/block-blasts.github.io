@@ -214,6 +214,10 @@
         .diff.insane { background: #e8463c; } .diff.demon { background: #3b0d4f; }
         .diff.legend { background: linear-gradient(90deg, #c8202c, #e8b93a); }
         .boss-play { font-size: 15px; padding: 6px 10px; }
+        .boss-check { position: absolute; top: -14px; right: 10px; width: 32px; height: 32px; border-radius: 50%; background: #5fc34a; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); display: none; align-items: center; justify-content: center; }
+        .boss-check svg { width: 18px; height: 18px; }
+        .boss-entry.beaten .boss-check { display: flex; animation: bossCheckPop .35s ease-out; }
+        @keyframes bossCheckPop { 0% { transform: scale(0.2); } 70% { transform: scale(1.18); } 100% { transform: scale(1); } }
         #skins-modal { position: absolute; inset: 0; z-index: 30; background: rgba(18,26,41,.86); padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
         .skins-head { display: flex; justify-content: space-between; align-items: center; }
         .skins-head h2 { margin: 0; font-size: 30px; font-weight: 700; color: var(--yellow);
@@ -370,6 +374,15 @@
                     </div>
                 </div>
 
+                <!-- Language -->
+                <div style="width:100%;display:flex;justify-content:space-between;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:14px;padding:6px 10px;">
+                    <div style="text-align:left;">
+                        <div style="font-size:13px;font-weight:700;color:var(--ink);">Language</div>
+                        <div style="font-size:10px;color:#5b6578;">English / Español</div>
+                    </div>
+                    <button id="toggle-lang-btn" class="btn blue small" style="width:auto;min-width:62px;padding:3px 8px;font-size:12px;">English</button>
+                </div>
+
                 <!-- Screen Shake Toggle -->
                 <div style="width:100%;display:flex;justify-content:space-between;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:14px;padding:6px 10px;">
                     <div style="text-align:left;">
@@ -407,7 +420,7 @@
                 </div>
 
                 <button id="settings-done-btn" class="btn green small" style="font-size:16px;padding:8px 12px;margin-top:2px;">DONE</button>
-                <div id="game-version" style="font-size:12px;color:#7a8396;letter-spacing:.5px;">Version 4.08.0</div>
+                <div id="game-version" style="font-size:12px;color:#7a8396;letter-spacing:.5px;">Version 6.08.0</div>
             </div>
         </div>
 
@@ -527,7 +540,7 @@
         //   BIG   (middle, 2 digits): a boss or something super big. Never resets.
         //   MINOR (first): a smaller feature, e.g. 2 more power-ups. Resets to 0 on a BIG update.
         //   PATCH (last):  a bug fix or performance patch. Resets to 0 on a BIG or MINOR update.
-        const GAME_VERSION = '4.08.0';
+        const GAME_VERSION = '6.08.0';
 
         const canvas = document.getElementById('gameCanvas');
         let ctx = canvas.getContext('2d', { alpha: false });   // 'let': the boss menu briefly points it at its preview canvases
@@ -561,6 +574,177 @@
             get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
             set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
         };
+
+        // ---------- Language: English / Español ----------
+        // Everything is written in English in the code; tr() swaps in the Spanish text at the moment it's shown,
+        // both for the page (menus, buttons, achievements) and for words drawn on the game canvas (popups, warnings).
+        const ES = {
+            // menus & buttons
+            'ACHIEVEMENT UNLOCKED': 'LOGRO DESBLOQUEADO', 'NEW POWER-UP UNLOCKED': 'NUEVO PODER DESBLOQUEADO',
+            'ACHIEVEMENTS': 'LOGROS', 'Achievements': 'Logros', 'BOSSES': 'JEFES', 'Bosses': 'Jefes',
+            'Best': 'Mejor', 'Score': 'Puntos', 'Close': 'Cerrar', 'DONE': 'LISTO', 'EQUIP': 'EQUIPAR', 'EQUIPPED': 'EQUIPADO',
+            'GAME OVER': 'FIN DEL JUEGO', 'Menu': 'Menú', 'PLAY': 'JUGAR', 'RESTART': 'REINICIAR', 'RETRY BOSS FIGHT': 'REINTENTAR JEFE',
+            'Pause': 'Pausa', 'Pause (P)': 'Pausa (P)', 'PAUSED': 'PAUSA', 'tap the button or press P': 'toca el botón o presiona P',
+            'SETTINGS': 'AJUSTES', 'Settings': 'Ajustes', '⚙ Settings': '⚙ Ajustes', 'SKINS': 'ASPECTOS', 'Skins': 'Aspectos',
+            'Move left': 'Mover a la izquierda', 'Move right': 'Mover a la derecha',
+            'Show / hide menu': 'Mostrar / ocultar menú', 'Show or hide the Game Over menu': 'Mostrar u ocultar el menú de Fin del juego',
+            'Tap screen or press Space to flap': 'Toca la pantalla o presiona Espacio para aletear',
+            'Click to respawn': 'Haz clic para reaparecer', 'Click to retry Boss Fight': 'Haz clic para reintentar el jefe',
+            'Switch to Normal Game': 'Cambiar a juego normal',
+            'Gold Medal': 'Medalla de oro', 'Silver Medal': 'Medalla de plata', 'Platinum Medal': 'Medalla de platino',
+            'Easy': 'Fácil', 'Normal': 'Normal', 'Hard': 'Difícil', 'Difficulty:': 'Dificultad:', 'Difficulty': 'Dificultad',
+            'Medium': 'Medio', 'Insane': 'Locura', 'Demon': 'Demonio', 'Legendary': 'Legendario', 'Beaten!': '¡Derrotado!',
+            // settings
+            'GORE INTENSITY:': 'INTENSIDAD DEL GORE:', 'Full Gore': 'Gore total', 'Light Gore': 'Gore ligero', 'Remove Gore': 'Sin gore',
+            'Cartoon smoke clouds, comic stars, sparkles & feathers instead of blood.': 'Nubes de humo de caricatura, estrellitas, destellos y plumas en vez de sangre.',
+            'Full blood, chunks, guts and gore. The way it was meant to be.': 'Sangre, pedazos, tripas y gore a todo lo que da. Como debe ser.',
+            'Less blood and fewer chunks: small splatters, no bones or organs.': 'Menos sangre y menos pedazos: salpicaduras chicas, sin huesos ni órganos.',
+            'No blood at all. Deaths become cartoon smoke clouds, comic stars, confetti and feathers.': 'Nada de sangre. Las muertes son nubes de humo de caricatura, estrellitas, confeti y plumas.',
+            'Screen Shake': 'Sacudida de pantalla', 'Impact rumble vibrations': 'Temblores con los impactos',
+            'Weather Events': 'Eventos del clima', 'Rain, storms, wind, fog, snow': 'Lluvia, tormentas, viento, niebla, nieve',
+            'Performance Mode': 'Modo rendimiento', 'Lower resolution, fewer particles': 'Menos resolución, menos partículas',
+            'Sound Effects': 'Efectos de sonido', 'Jump, chomp & sounds': 'Saltos, mordidas y sonidos',
+            'Language': 'Idioma', 'ON': 'SÍ', 'OFF': 'NO',
+            // skins & power-ups
+            'Classic Flappy': 'Flappy clásico', 'Cyber Neon': 'Ciber neón', 'Golden Phoenix': 'Fénix dorado', 'Shadow Bat': 'Murciélago sombra', 'Emerald Drake': 'Dragón esmeralda',
+            'Standard flight': 'Vuelo normal', '+20% Power Duration': '+20% duración de poderes', '+15% Power Orb Spawn': '+15% más orbes de poder',
+            'Starts with Shield': 'Empieza con escudo', '+1 Bonus Point on Orb': '+1 punto extra por orbe',
+            'Shield': 'Escudo', '2x Points': 'Puntos x2', 'Slow Motion': 'Cámara lenta', 'Point Magnet': 'Imán de puntos',
+            'Ghost': 'Fantasma', 'Mini Me': 'Mini yo', 'Pringle Power': 'Poder Pringle',
+            'Fly straight through pipes, Thwomps and plants.': 'Atraviesa tubos, Thwomps y plantas.',
+            'Tiny bird, tiny hitbox.': 'Pájaro chiquito, hitbox chiquita.',
+            'Invincible! Even the floor bounces you back up.': '¡Invencible! Hasta el suelo te rebota hacia arriba.',
+            // bosses
+            'Big Mr. Crusher': 'Gran Sr. Aplastador', 'Mr. Mitt': 'Sr. Guante', 'Mr. Chompsalot': 'Sr. Masticón', 'Sir Clanksalot': 'Sir Clanclán',
+            'BIG MR. CRUSHER': 'GRAN SR. APLASTADOR', 'MR. MITT': 'SR. GUANTE', 'MR. CHOMPSALOT': 'SR. MASTICÓN', 'SIR CLANKSALOT': 'SIR CLANCLÁN',
+            "ON SHIFT. ALWAYS. 300 years and I still don't know why I crush things.": 'DE TURNO. SIEMPRE. 300 años y todavía no sé por qué aplasto cosas.',
+            "Hold still. You're smudging my work.": 'Quieto. Me estás manchando el trabajo.',
+            "I can't reach the snacks either. That's why I'm angry.": 'Yo tampoco alcanzo las botanas. Por eso estoy enojado.',
+            'None shall pass. Especially not birds.': 'Nadie pasará. Y menos los pájaros.',
+            'WARNING!': '¡CUIDADO!', 'BOSS DOWN!': '¡JEFE DERROTADO!', 'ENRAGED!': '¡FURIOSO!',
+            'double slams & rock rain': 'golpes dobles y lluvia de rocas', 'frenzy bites & dirt rain': 'mordidas frenéticas y lluvia de tierra',
+            'shield crush & flying swords': 'escudazos y espadas voladoras', 'rocks incoming': '¡ahí vienen rocas!',
+            // boss shouts & sound words
+            '*COUGH!* *CHOKE!*': '*¡COF!* *¡AGH!*', '*COUGH* *COUGH*': '*COF* *COF*', '*cough*': '*cof*', '*glug glug*': '*glu glu*', '*grunt*': '*gruñido*',
+            '...IT WAS EMPTY?!': '¡¿...ESTABA VACÍA?!', 'AHA!': '¡AJÁ!', 'BONK!': '¡BONK!', 'BURP!': '¡BURP!', 'BY MY SHIELD!': '¡POR MI ESCUDO!',
+            'CATCH!': '¡ATRAPA!', 'CHAAARGE!': '¡A LA CARGAAA!', 'CHOMP!': '¡ÑAM!', 'CLANG!': '¡CLANG!', 'COME ON!': '¡VAMOS!',
+            'CRACKED HILTS FLY UP!': '¡EMPUÑADURA ROTA = SALE VOLANDO!', 'CRUMBLE!': '¡SE DESMORONA!', 'CRUSH!': '¡APLASTADO!',
+            'EN GARDE!': '¡EN GUARDIA!', 'FOUL TRICK!': '¡TRUCO SUCIO!', 'HALT!': '¡ALTO!', 'HAVE AT THEE!': '¡TOMA ESTO, BELLACO!',
+            'HEAVENS, ARM ME!': '¡CIELOS, ARMADME!', 'HEH.': 'JE.', 'HNNNGH!': '¡NNNGH!', 'HWACK!': '¡ZAS!', 'HYAH!': '¡JIA!',
+            'I... YIELD...': 'ME... RINDO...', 'KNUCKLE SANDWICH!': '¡SÁNDWICH DE NUDILLOS!', 'METEOR SHOWER!': '¡LLUVIA DE METEOROS!',
+            'MOVE!': '¡MUÉVETE!', 'MY TOE!': '¡MI DEDITO!', 'Medicine time...': 'Hora de la medicina...', 'NOT YET!': '¡TODAVÍA NO!',
+            'OW! MY OWN SWORD!': '¡AY! ¡MI PROPIA ESPADA!', 'POOF!': '¡PUF!', 'POP!': '¡POP!', 'PSYCH!': '¡CAÍSTE!',
+            'PTOOEY!': '¡PTUI!', 'PTUI!': '¡PTUI!', 'RAIN OF BLADES!': '¡LLUVIA DE ESPADAS!', 'RAWR!': '¡RAWR!', 'ROOOAR!': '¡ROOOAR!',
+            'RUMBLE...': 'RETUMBA...', 'RUN THE GAUNTLET!': '¡CRUZA EL PASILLO DE ESPADAS!', 'SHING!': '¡SHING!',
+            'SKY... HEAR ME!': 'CIELO... ¡ESCÚCHAME!', 'SMACK!': '¡PAF!', 'STOMP!': '¡PISOTÓN!', 'SWORDS, ATTACK!': '¡ESPADAS, AL ATAQUE!',
+            'SORE THROAT! BOUNCE ON HIS HEAD!': '¡LE DUELE LA GARGANTA! ¡REBOTA EN SU CABEZA!',
+            'SWORD STUCK! BOUNCE ON HIS HELMET!': '¡ESPADA ATORADA! ¡REBOTA EN SU CASCO!',
+            'TAKE THAT!': '¡TOMA ESO!', 'WHERE DID HE GO?': '¿A DÓNDE SE FUE?', 'ZAP!': '¡ZAS!', 'come here': 'ven acá',
+            // weather
+            'RAIN': 'LLUVIA', 'THUNDERSTORM': 'TORMENTA ELÉCTRICA', 'WIND': 'VIENTO', 'FOG': 'NIEBLA', 'SNOW': 'NIEVE', 'BLOOD RAIN': 'LLUVIA DE SANGRE',
+            'Wet feathers: you fall a bit faster': 'Plumas mojadas: caes un poco más rápido', 'Watch for the lightning warning!': '¡Atento al aviso de rayo!',
+            'Gusts push you up and down': 'Las ráfagas te empujan arriba y abajo', "You can't see far ahead": 'No ves muy lejos',
+            'It is getting cold out here': 'Está haciendo frío aquí afuera', 'Plukbering is not happy': 'Plukbering no está contento',
+            'UPDRAFT!': '¡CORRIENTE HACIA ARRIBA!', 'DOWNDRAFT!': '¡CORRIENTE HACIA ABAJO!',
+            // achievements
+            'Hello World': 'Hola Mundo', 'Every legend starts by squeezing through a gap.': 'Toda leyenda empieza colándose por un hueco.', 'Pass your first pipe.': 'Pasa tu primer tubo.',
+            'Tutorial Arc Complete': 'Arco del tutorial completado', 'Ten doors, none of them locked.': 'Diez puertas, ninguna con llave.', 'Score 10 in a single run.': 'Haz 10 puntos en una partida.',
+            'Pipe Dreams': 'Sueños de tubería', 'Noclip deeper. Level 2 hums with endless pipes. Fifty of them.': 'Haz noclip más hondo. El nivel 2 zumba con tubos sin fin. Cincuenta.', 'Score 50 in a single run.': 'Haz 50 puntos en una partida.',
+            'Main Character Energy': 'Energía de protagonista', 'Triple digits. The sky is your comment section.': 'Tres cifras. El cielo es tu sección de comentarios.', 'Score 100 in a single run.': 'Haz 100 puntos en una partida.',
+            'Side Quest Unlocked': 'Misión secundaria desbloqueada', 'Fly far enough and somebody important notices you.': 'Vuela lo suficiente y alguien importante se fijará en ti.', 'Reach a boss during a normal run.': 'Llega a un jefe en una partida normal.',
+            'Skill Issue (Theirs)': 'Skill issue (el suyo)', 'The wall that has been on shift for 300 years finally clocks out.': 'El muro que lleva 300 años de turno por fin checa su salida.', 'Defeat Big Mr. Crusher.': 'Derrota al Gran Sr. Aplastador.',
+            'Talk to the Hand': 'Háblale a la mano', "Put the builder's glove back in the drawer.": 'Regresa el guante del constructor a su cajón.', 'Defeat Mr. Mitt.': 'Derrota al Sr. Guante.',
+            'The Meteor Was Late': 'El meteorito llegó tarde', "Do what the asteroid couldn't.": 'Haz lo que el asteroide no pudo.', 'Defeat Mr. Chompsalot.': 'Derrota al Sr. Masticón.',
+            "Sir, This Is A Wendy's": "Señor, esto es un Wendy's", 'Knock the lid off the tin can with a cross on his chest.': 'Quítale la tapa a la lata con una cruz en el pecho.', 'Defeat Sir Clanksalot.': 'Derrota a Sir Clanclán.',
+            "It's Over, Plukbering": 'Se acabó, Plukbering', 'Every enforcer, retired.': 'Todos sus matones, jubilados.', 'Defeat all four bosses.': 'Derrota a los cuatro jefes.',
+            'Five Head': 'Frentón x5', "When the giant is seeing stars, dance on him. Don't touch the floor.": 'Cuando el gigante vea estrellitas, baila sobre él. No toques el suelo.', 'Land a x5 combo on a dizzy boss.': 'Haz un combo x5 sobre un jefe mareado.',
+            'Touch Grass (It Was Wet)': 'Toca pasto (estaba mojado)', 'Rain, thunder, wind, fog and snow. See every mood of the sky.': 'Lluvia, truenos, viento, niebla y nieve. Conoce todos los humores del cielo.', 'Fly through all 5 kinds of weather.': 'Vuela con los 5 tipos de clima.',
+            'Unlimited Power': 'Poder ilimitado', 'Stand exactly where the sky points.': 'Párate justo donde apunta el cielo.', 'Get struck by lightning.': 'Que te caiga un rayo.',
+            '3 AM Challenge': 'Reto de las 3 AM', 'Stay out way past your bedtime.': 'Quédate afuera mucho después de tu hora de dormir.', 'Keep flying until nightfall.': 'Sigue volando hasta que anochezca.',
+            'Stonks': 'Stonks', 'Hoard ten shiny things.': 'Junta diez cosas brillantes.', 'Collect 10 power-ups.': 'Recoge 10 poderes.',
+            'Drip Check': 'Revisión de outfit', 'A bird needs at least three fits.': 'Un pájaro necesita al menos tres outfits.', 'Try 3 different skins.': 'Prueba 3 aspectos distintos.',
+            "The Salad's Revenge": 'La venganza de la ensalada', 'For once, something green eats you.': 'Por una vez, algo verde te come a ti.', 'Get eaten by a piranha plant.': 'Que te coma una planta piraña.',
+            'Certified Snack': 'Botana certificada', 'Be on the menu ten times.': 'Sé parte del menú diez veces.', 'Get eaten 10 times.': 'Que te coman 10 veces.',
+            'This Is Fine': 'Todo está bien', 'Catch something hot from a hungry flower.': 'Atrapa algo caliente de una flor hambrienta.', 'Get hit by a piranha fireball.': 'Que te pegue una bola de fuego de planta piraña.',
+            'Pinned Comment': 'Comentario fijado', "Get a little too close to a falling block's teeth.": 'Acércate demasiado a los dientes de un bloque que cae.', "Get impaled on a Thwomp's spikes.": 'Empálate en los picos de un Thwomp.',
+            'Flat Earth Society': 'Sociedad de la Tierra plana', 'Stand exactly where the warning tells you not to.': 'Párate justo donde el aviso dice que no.', 'Get flattened by a boss.': 'Que te aplaste un jefe.',
+            'Built Different (In Half)': 'Hecho diferente (a la mitad)', 'Meet a red line the hard way.': 'Conoce una línea roja por las malas.', 'Get cut in half by a laser.': 'Que un láser te parta a la mitad.',
+            'Down Bad': 'Por los suelos', 'Find out what is under you.': 'Descubre qué hay debajo de ti.', 'Crash into the ground.': 'Estréllate contra el suelo.',
+            'Placeholder Achievement': 'Logro placeholder', 'Some buttons do nothing. Press one anyway. Ten times.': 'Algunos botones no hacen nada. Presiona uno de todos modos. Diez veces.',
+            'Press the Placeholder button 10 times.': 'Presiona el botón Placeholder 10 veces.', 'Press the Placeholder button 100 times.': 'Presiona el botón Placeholder 100 veces.',
+            'Press the Placeholder button 500 times.': 'Presiona el botón Placeholder 500 veces.', 'Press the Placeholder button 1000 times.': 'Presiona el botón Placeholder 1000 veces.',
+            "Bro Thinks It's Cookie Clicker": 'El bro cree que es Cookie Clicker', 'A hundred presses of absolutely nothing.': 'Cien clics de absolutamente nada.',
+            'Sigma Button Grindset': 'Mentalidad sigma del botón', 'Five hundred. The button has started to fear you.': 'Quinientos. El botón ya te tiene miedo.',
+            'Main Quest: Ignored': 'Misión principal: ignorada', 'A thousand presses. The pipes miss you.': 'Mil clics. Los tubos te extrañan.',
+            'Fail fifty times. The Pringles are worth it.': 'Falla cincuenta veces. Las Pringles lo valen.', 'Die 50 times.': 'Muere 50 veces.'
+        };
+        const ES_RX = [
+            [/^BEST (\d+)$/, 'MEJOR $1'], [/^(\d+) \/ (\d+) unlocked$/, '$1 / $2 desbloqueados'], [/^HP: (\d+)$/, 'VIDA: $1'],
+            [/^Version (.+)$/, 'Versión $1']
+        ];
+        let LANG = store.get('fb_lang', /^es\b/i.test(navigator.language || '') ? 'es' : 'en');
+        const _trCache = new Map();
+        function trRaw(s) {
+            if (ES[s] !== undefined) return ES[s];
+            const m = s.match(/^(\s*["“]?)([\s\S]*?)(["”]?\s*)$/);          // the same text wrapped in quotes or whitespace
+            if (m && (m[1] || m[3]) && ES[m[2]] !== undefined) return m[1] + ES[m[2]] + m[3];
+            for (const [rx, rep] of ES_RX) if (rx.test(s)) return s.replace(rx, rep);
+            const i = s.indexOf(': ');                                            // "Name: blurb"
+            if (i > 0) { const a = s.slice(0, i), b = s.slice(i + 2); if (ES[a] !== undefined || ES[b] !== undefined) return (ES[a] ?? a) + ': ' + (ES[b] ?? b); }
+            return s;
+        }
+        function tr(s) {
+            if (LANG !== 'es' || typeof s !== 'string' || s.length < 2) return s;
+            let r = _trCache.get(s);
+            if (r === undefined) { r = trRaw(s); if (_trCache.size > 3000) _trCache.clear(); _trCache.set(s, r); }
+            return r;
+        }
+        // words drawn on any canvas go through tr() too (measureText as well, so centring and sizing still fit)
+        (function () {
+            const P = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+            if (!P || P.__tr) return;
+            for (const k of ['fillText', 'strokeText', 'measureText']) {
+                const o = P[k];
+                P[k] = function (t) { if (LANG === 'es' && typeof t === 'string' && t.length > 1) { const a = Array.prototype.slice.call(arguments); a[0] = tr(t); return o.apply(this, a); } return o.apply(this, arguments); };
+            }
+            P.__tr = true;
+        })();
+        // the page: every text node and tooltip keeps its English original and shows the current language
+        const TR_ATTRS = ['title', 'aria-label', 'placeholder'];
+        function trNode(n) {
+            if (n.nodeType === 3) {
+                if (n.__tr !== n.nodeValue) n.__en = n.nodeValue;
+                if (!/[A-Za-z]{2}/.test(n.__en)) return;
+                const v = LANG === 'es' ? tr(n.__en) : n.__en;
+                n.__tr = v;
+                if (n.nodeValue !== v) n.nodeValue = v;
+            } else if (n.nodeType === 1) {
+                if (n.tagName === 'SCRIPT' || n.tagName === 'STYLE' || n.tagName === 'svg') return;
+                n.__enA = n.__enA || {};
+                for (const a of TR_ATTRS) {
+                    if (!n.hasAttribute(a)) continue;
+                    const cur = n.getAttribute(a);
+                    if (n.__trA && n.__trA[a] === cur) { /* ours */ } else n.__enA[a] = cur;
+                    const v = LANG === 'es' ? tr(n.__enA[a]) : n.__enA[a];
+                    (n.__trA = n.__trA || {})[a] = v;
+                    if (cur !== v) n.setAttribute(a, v);
+                }
+                for (let c = n.firstChild; c; c = c.nextSibling) trNode(c);
+            }
+        }
+        function applyLanguage() {
+            document.documentElement.lang = LANG;
+            trNode(document.body);
+        }
+        try {
+            new MutationObserver(list => {
+                for (const m of list) {
+                    if (m.type === 'characterData') trNode(m.target);
+                    else if (m.type === 'attributes') trNode(m.target);
+                    else m.addedNodes.forEach(trNode);
+                }
+            }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
+        } catch (e) {}
 
         const DIFFICULTIES = [
             { name: 'Easy',   pipeSpeed: 1.8, pipeGap: 170, jumpForce: -7.0, gravity: 0.36, pipeInterval: 120, thwopChance: 0.10 },
@@ -5460,6 +5644,7 @@
         // Once he's down, the arm goes limp: the elbow drops and the forearm lies on the floor behind the hand.
         const MITT_SUIT = '#232c40', MITT_SUIT_DK = '#161c2b';
         function drawMittArm(d, sq) {
+            if (d.noArm) return;                                     // (the Bosses menu card shows just the glove)
             const S = MITT_S * d.scale, sx = sq ? sq[0] : 1, sy = sq ? sq[1] : 1;
             const c = Math.cos(d.rot), sn = Math.sin(d.rot), gy = groundY();
             const toW = (lx, ly) => [d.x + (lx * S * sx) * c - ((ly - 22) * S * sy) * sn, d.y + (lx * S * sx) * sn + ((ly - 22) * S * sy) * c];
@@ -10152,6 +10337,7 @@
         // white Fredoka lettering with a black outline; each letter can bob on its own wave and pop in one after another
         function vsText(txt, x, y, size, maxW, t, opt) {
             opt = opt || {};
+            txt = tr(txt);
             ctx.save();
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
             ctx.font = `700 ${size}px Fredoka, "Trebuchet MS", system-ui, sans-serif`;
@@ -10971,7 +11157,123 @@
             const g = cv.getContext('2d');
             g.setTransform(1, 0, 0, 1, 0, 0);
             g.clearRect(0, 0, W, H);
-            bossIdleInto(g, kind, W, H, dp);
+            if (bossBeaten(kind)) bossDeadInto(g, kind, W, H, dp);
+            else bossIdleInto(g, kind, W, H, dp);
+        }
+        const BOSS_ACH = { crusher: 'beat_crusher', glove: 'beat_mitt', dino: 'beat_dino', knight: 'beat_knight' };
+        const bossBeaten = kind => !!(achState && achState.unlocked && achState.unlocked[BOSS_ACH[kind]]);
+        function syncBossChecks() {
+            bossesModal.querySelectorAll('.boss-entry').forEach(en => {
+                const kind = Object.keys(BOSS_ACH).find(k => en.classList.contains(k));
+                if (!en.querySelector('.boss-check')) {
+                    const c = document.createElement('div'); c.className = 'boss-check'; c.title = 'Beaten!';
+                    c.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="#1b2433" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    en.appendChild(c);
+                }
+                en.classList.toggle('beaten', bossBeaten(kind));
+            });
+        }
+        // a beaten boss's card shows what's left of him after the fight, looping
+        let _deadCache = {};
+        function bossDeadInto(g, kind, W, H, dp) {
+            const saved = Object.assign({}, boss), realCtx = ctx, so = gloveOutline, sf = gloveFillCol;
+            const sH = state.height, sFC = state.frameCount;
+            const t = performance.now() / 16.67;
+            const LW = W / dp, LH = H / dp, GH = 13, gyL = LH - GH;
+            const ground = () => {                                            // a strip of floor for them to lie on
+                g.setTransform(dp, 0, 0, dp, 0, 0);
+                g.fillStyle = '#d2a35c'; g.fillRect(0, gyL, LW, GH);
+                g.fillStyle = '#5fc34a'; g.fillRect(0, gyL, LW, 4);
+                g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(0, gyL); g.lineTo(LW, gyL); g.stroke();
+            };
+            const stars = (x, y, r, n, sz) => { for (let i = 0; i < n; i++) { const a = t * 0.08 + i * BTAU / n; bossStar(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.25, sz, t * 0.12); } };
+            try {
+                ctx = g;
+                state.frameCount = Math.floor(t);
+                Object.assign(boss, { active: true, flash: 0, shake: 0, hp: 0, maxHp: 100, phase2: false, enrage: 0, beamActive: false, beamCharge: 0, fg: false, stun: 0 });
+                if (kind === 'crusher') {                                      // crumbled into a heap of rubble, cracked face plate on top
+                    const sc = 0.5;
+                    g.setTransform(dp * sc, 0, 0, dp * sc, 0, 0);
+                    state.height = gyL / sc + GROUND_H;
+                    const gy = gyL / sc, cx = LW / sc / 2;
+                    if (!_deadCache.crusher) {
+                        const cracks = [];
+                        for (let k = 0; k < 9; k++) {
+                            let x = BOSS_W / 2 + rand(-16, 16), y = BOSS_H / 2 + rand(-20, 20), a = rand(0, 6.283); const pts = [[x, y]];
+                            for (let q = 0; q < 4; q++) { a += rand(-0.6, 0.6); x = clamp(x + Math.cos(a) * rand(10, 18), 4, BOSS_W - 4); y = clamp(y + Math.sin(a) * rand(10, 18), 4, BOSS_H - 4); pts.push([x, y]); }
+                            cracks.push(pts);
+                        }
+                        const rocks = [];
+                        for (let k = 0; k < 22; k++) {
+                            const u = rand(-1, 1), r = rand(9, 19);
+                            rocks.push({ x: cx + u * 105, y: gy - (1 - u * u) * 42 - r * 0.3 + rand(-6, 6), r, a: rand(0, 6.28), pts: Array.from({ length: 7 }, () => rand(0.72, 1.1)), c: pick(['#7d889b', '#a4aec0', '#5b6578', '#8e98ab']) });
+                        }
+                        rocks.sort((a, b) => a.y - b.y);
+                        _deadCache.crusher = { cracks, rocks };
+                    }
+                    const C = _deadCache.crusher;
+                    Object.assign(boss, { kind: 'crusher', w: BOSS_W, h: BOSS_H, state: 'DYING', lookX: 0, lookY: 0.4,
+                        die: { phase: 'crack', n: C.cracks.length, hornsOff: true, cracks: C.cracks, t, pt: 0 } });
+                    boss.x = cx - BOSS_W / 2; boss.y = gy - BOSS_H * 0.78;
+                    g.save(); g.translate(cx, gy - 30); g.rotate(-0.22 + Math.sin(t * 0.03) * 0.015); g.translate(-cx, -(gy - 30));
+                    drawBoss();
+                    g.restore();
+                    for (const r of C.rocks) {
+                        g.save(); g.translate(r.x, r.y); g.rotate(r.a);
+                        g.beginPath(); r.pts.forEach((k, i) => { const a = i / r.pts.length * BTAU; g.lineTo(Math.cos(a) * r.r * k, Math.sin(a) * r.r * k); }); g.closePath();
+                        g.fillStyle = r.c; g.fill(); g.strokeStyle = INK; g.lineWidth = 3; g.stroke();
+                        g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(-r.r * 0.3, -r.r * 0.3, r.r * 0.3, 0, BTAU); g.fill();
+                        g.restore();
+                    }
+                    for (let i = 0; i < 4; i++) {                              // dust still drifting up
+                        const k = ((t * 0.006 + i / 4) % 1);
+                        g.fillStyle = `rgba(233,226,207,${0.6 * (1 - k)})`;
+                        g.beginPath(); g.arc(cx + Math.sin(i * 2.3 + t * 0.02) * 70, gy - 40 - k * 120, 10 + k * 16, 0, BTAU); g.fill();
+                    }
+                    stars(cx, gy - BOSS_H * 0.95, 34, 3, 9);
+                    ground();
+                } else if (kind === 'glove') {                                 // lying palm-up on the floor, dizzy, waving a little white flag
+                    const sc = 0.5;
+                    g.setTransform(dp * sc, 0, 0, dp * sc, 0, 0);
+                    state.height = gyL / sc + GROUND_H;
+                    const gy = gyL / sc, x = LW / sc / 2 + 22;
+                    Object.assign(boss, { kind: 'glove', w: MITT_W, h: MITT_H, vis: MITT_H, state: 'DEFEATED',
+                        die: { phase: 'rest', t, pt: 999, x: x - 10, y: gy - 30, rot: Math.PI / 2 + Math.sin(t * 0.04) * 0.03, scale: 1, wob: 0.12, flag: 1, glass: [], ax: x - 10, vx: 0, vy: 0, noArm: true } });
+                    drawBoss();
+                    ground();
+                } else if (kind === 'dino') {                                  // choked on his syrup: half sunk into the ground, X eyes, glass and bottle dropped
+                    g.setTransform(dp, 0, 0, dp, 0, 0);
+                    const S = 0.42;
+                    Object.assign(boss, { kind: 'dino', dsc: S, dgy: gyL, dbx: LW * 0.78, rise: 0.74 + Math.sin(t * 0.05) * 0.012, lean: 0, bobY: 0, squish: 0, coughK: 0, armT: t, holding: false, sub: '', state: 'DYING', jaw: 0.55, look: 0 });
+                    const G = dinoGeo();
+                    boss.hx = G.restX - 14 * S; boss.hy = G.restY + 60 * S + Math.sin(t * 0.05) * 1.5;
+                    boss.die = { phase: 'sink', t, pt: 999, drop: { gx: LW * 0.14, gy: gyL - 2, gvy: 0, gr: 1.45, bx: LW * 0.3, by: gyL - 2, bvy: 0, br: -1.5 } };
+                    drawBoss();
+                    g.setTransform(dp, 0, 0, dp, 0, 0);
+                    stars(boss.hx, boss.hy - 26, 16, 3, 5);
+                    ground();
+                } else {                                                       // the empty armour, helmet off and on the floor, a moth flying out
+                    g.setTransform(dp, 0, 0, dp, 0, 0);
+                    const S = 0.3;
+                    const kp = Object.assign(knightIdle(t), { hx: -100, hy: 130, ang: 2.6, sx: 70, sy: 140, sang: 0.5, lean: Math.sin(t * 0.03) * 2, helm: 10, swordOff: 1, shieldOff: 0 });
+                    Object.assign(boss, { kind: 'knight', ksc: S, kgy: gyL + 4, kbx: LW * 0.64, rise: 1, kp, kpos: 'front', armT: t, kswish: 0, kblink: 0, kfg: null, kcrush: null, state: 'DYING' });
+                    const G = knightGeo();
+                    const mk = (t * 0.012) % 1;
+                    boss.die = { phase: 'pop', t, pt: 999,
+                        sword: { x: LW * 0.1, y: gyL + 8 - 160 * S * 0.99, ang: Math.PI * 0.96, stuck: true },
+                        helm: { x: LW * 0.3, y: gyL - 40 * S + 2, rot: 0.3 + Math.sin(t * 0.06) * 0.06 },
+                        moth: { x: G.hx + Math.sin(t * 0.07) * 9, y: G.shY - 6 - mk * 70, t } };
+                    drawBoss();
+                    ground();
+                }
+            } catch (e) { /* a preview frame failing must never break the menu */ }
+            finally {
+                ctx = realCtx;
+                state.height = sH; state.frameCount = sFC;
+                for (const k of Object.keys(boss)) if (!(k in saved)) delete boss[k];
+                Object.assign(boss, saved);
+                gloveOutline = so; gloveFillCol = sf;
+            }
         }
         // draws one boss doing its idle animation into any canvas (W x H backing pixels, dp = pixels per art unit)
         function bossIdleInto(g, kind, W, H, dp) {
@@ -11028,6 +11330,7 @@
         }
         function openBosses() {
             bossesModal.classList.remove('hidden');
+            syncBossChecks();
             if (!bossPrevRAF) bossPrevRAF = requestAnimationFrame(bossPreviewLoop);
         }
         function closeBosses() { bossesModal.classList.add('hidden'); }
@@ -11088,6 +11391,7 @@
             });
             document.getElementById('gore-desc-text').textContent = GORE_INFO[state.goreLevel];
             paintToggle(document.getElementById('toggle-shake-btn'), state.screenShake);
+            document.getElementById('toggle-lang-btn').textContent = LANG === 'es' ? 'Español' : 'English';
             paintToggle(document.getElementById('toggle-weather-btn'), state.weatherOn);
             paintToggle(document.getElementById('toggle-perf-btn'), state.perf);
             paintToggle(document.getElementById('toggle-sound-btn'), !sound.muted);
@@ -11124,6 +11428,12 @@
         document.getElementById('settings-done-btn').addEventListener('click', e => { e.stopPropagation(); closeSettings(); });
         settingsModal.addEventListener('pointerdown', e => e.stopPropagation());
         Object.keys(GORE_BTN).forEach(k => document.getElementById(GORE_BTN[k]).addEventListener('click', e => { e.stopPropagation(); setGore(k); }));
+        document.getElementById('toggle-lang-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            LANG = LANG === 'es' ? 'en' : 'es'; store.set('fb_lang', LANG);
+            applyLanguage(); syncSettingsUI();
+        });
+        applyLanguage();
         document.getElementById('toggle-shake-btn').addEventListener('click', e => {
             e.stopPropagation();
             state.screenShake = !state.screenShake; store.set('fb_shake', state.screenShake ? '1' : '0'); syncSettingsUI();
