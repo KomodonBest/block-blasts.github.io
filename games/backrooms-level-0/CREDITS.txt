@@ -1,0 +1,7 @@
+THE BACKROOMS — credits
+
+Footstep sounds: Sounds by JDSherbert – https://jdsherbert.itch.io/footstep-foley-sfx-pack (Footstep Foley SFX Pack)
+Level 0 ambience: "Backrooms Ambience" by Resaural – https://freesound.org/people/Resaural/sounds/626096/ (CC0)
+Backrooms textures: Amini Allight – https://github.com/amini-allight/backrooms-textures (CC0)
+Poolrooms textures: Amini Allight – https://github.com/amini-allight/poolrooms-textures (CC0)
+3D engine: three.js – https://threejs.org (MIT, see lib/three-LICENSE.txt)

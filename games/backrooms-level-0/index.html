@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The Backrooms — Level 0</title>
+<style>
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:#000; overflow:hidden; -webkit-user-select:none; user-select:none; touch-action:none; }
+  canvas { display:block; position:fixed; inset:0; width:100%; height:100%; }
+  .layer { position:fixed; inset:0; pointer-events:none; }
+  #stick { position:absolute; left:7%; bottom:12%; width:130px; height:130px; border-radius:50%; border:1px solid rgba(240,230,180,.28);
+    background:rgba(0,0,0,.12); pointer-events:auto; touch-action:none; }
+  #stick i { position:absolute; left:50%; top:50%; width:50px; height:50px; margin:-25px; border-radius:50%; background:rgba(240,230,180,.2); }
+  .tbtn { position:absolute; pointer-events:auto; touch-action:none; font:600 15px/1 system-ui, sans-serif; letter-spacing:.12em; color:rgba(240,230,180,.85);
+    background:rgba(0,0,0,.2); border:1px solid rgba(240,230,180,.3); border-radius:50%; width:86px; height:86px; }
+  .tbtn:active { background:rgba(240,230,180,.2); }
+  #tJump { right:8%; bottom:14%; }
+  #tRun { right:calc(8% + 100px); bottom:calc(14% - 10px); width:72px; height:72px; font-size:13px; }
+  #tRun.on { background:rgba(240,230,180,.42); color:#16140c; border-color:rgba(240,230,180,.8); }
+  .tbtn.pill { border-radius:22px; width:auto; height:auto; padding:10px 16px; font-size:13px; }
+  #tLevel { right:8%; bottom:calc(14% + 104px); }
+  #tInfo { left:14px; top:14px; width:30px; height:30px; font:italic 600 15px/1 Georgia, serif; letter-spacing:0; opacity:.6; }
+  #credits { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
+  #credits[hidden] { display:none; }
+  .cbox { max-width:min(560px, 90vw); max-height:85vh; overflow:auto; background:#141410; color:#e8e2c4; border:1px solid rgba(240,230,180,.25);
+    border-radius:10px; padding:22px 26px; font:15px/1.5 system-ui, sans-serif; user-select:text; -webkit-user-select:text; }
+  .cbox h2 { margin:0 0 12px; font-size:18px; letter-spacing:.08em; font-weight:600; }
+  .cbox p { margin:0 0 10px; } .cbox a { color:#d9cd8c; word-break:break-word; }
+  .cclose { margin-top:8px; font:600 14px system-ui; color:#e8e2c4; background:transparent; border:1px solid rgba(240,230,180,.4); border-radius:6px; padding:8px 16px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="touch" class="layer on">
+  <div id="stick"><i></i></div>
+  <button class="tbtn" id="tJump">JUMP</button>
+  <button class="tbtn" id="tRun">SHIFT</button>
+  <button class="tbtn pill" id="tLevel">POOLROOMS</button>
+  <button class="tbtn" id="tInfo" aria-label="Credits">i</button>
+</div>
+<div id="credits" hidden>
+  <div class="cbox">
+    <h2>Credits</h2>
+    <p><b>Footstep sounds</b>: Sounds by JDSherbert – <a href="https://jdsherbert.itch.io/footstep-foley-sfx-pack" target="_blank" rel="noopener">jdsherbert.itch.io</a> (Footstep Foley SFX Pack)</p>
+    <p><b>Level 0 ambience</b>: “Backrooms Ambience” by Resaural – <a href="https://freesound.org/people/Resaural/sounds/626096/" target="_blank" rel="noopener">freesound.org</a> (CC0)</p>
+    <p><b>Backrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/backrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/backrooms-textures</a> (CC0)</p>
+    <p><b>Poolrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/poolrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/poolrooms-textures</a> (CC0)</p>
+    <p><b>3D engine</b>: three.js – <a href="https://threejs.org" target="_blank" rel="noopener">threejs.org</a> (MIT)</p>
+    <button class="cclose" id="cClose">Close</button>
+  </div>
+</div>
+
+<script type="module" src="./game.js"></script>
+</body>
+</html>
