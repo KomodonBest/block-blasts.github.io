@@ -8,6 +8,7 @@ import { ShaderPass } from './lib/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from './lib/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from './lib/jsm/postprocessing/GTAOPass.js';
 import { Reflector } from './lib/jsm/objects/Reflector.js';
+import { GLTFLoader } from './lib/jsm/loaders/GLTFLoader.js';
 
 const TEST = location.hash === '#test';
 
@@ -398,7 +399,7 @@ scene.environment = ENVS[0];
 // ───────────────────────────── textures & materials ────────────────────────
 const manager = new THREE.LoadingManager();
 // ── loading screen bookkeeping ──
-const LOAD = { tex: [0, 1], texDone: false, aud: [0, 0], audDone: false, world: false, shaders: false, fails: [], finished: false, t0: performance.now() };
+const LOAD = { tex: [0, 1], texDone: false, aud: [0, 0], audDone: false, world: false, shaders: false, mp: false, mpText: '', fails: [], finished: false, t0: performance.now() };
 function loaderUI() {
   const el = id => document.getElementById(id);
   const set = (id, state, txt) => { const li = el(id); if (!li) return; const st = li.querySelector('.st');
@@ -408,17 +409,19 @@ function loaderUI() {
   set('lc-aud', LOAD.audDone ? (audBad ? 'bad' : 'ok') : '', `${LOAD.aud[0]}/${LOAD.aud[1]}`);
   set('lc-wld', LOAD.world ? 'ok' : '', LOAD.world ? 'generated' : '');
   set('lc-shd', LOAD.shaders ? 'ok' : '', LOAD.shaders ? 'compiled' : '');
+  set('lc-mp', LOAD.mp ? 'ok' : '', LOAD.mpText || 'connecting…');
   const p = (LOAD.tex[0] / Math.max(1, LOAD.tex[1])) * 0.45 + (LOAD.aud[0] / Math.max(1, LOAD.aud[1])) * 0.35 + (LOAD.world ? 0.1 : 0) + (LOAD.shaders ? 0.1 : 0);
   const bar = el('lBar'); if (bar) bar.style.width = Math.round(Math.min(1, p) * 100) + '%';
   const w = el('lWarn'); if (w) w.textContent = LOAD.fails.length ? `${LOAD.fails.length} file${LOAD.fails.length > 1 ? 's' : ''} failed to load — you can still enter.` : '';
 }
 function loaderCheck() {
   loaderUI();
-  if (LOAD.finished || !(LOAD.texDone && LOAD.audDone && LOAD.world && LOAD.shaders)) return;
+  if (LOAD.finished || !(LOAD.texDone && LOAD.audDone && LOAD.world && LOAD.shaders && LOAD.mp)) return;
   LOAD.finished = true;
   if (!document.getElementById('lSub')) return;
   document.getElementById('lSub').textContent = LOAD.fails.length ? 'LOADED WITH ERRORS' : 'ALL LOADED';
   const go = document.getElementById('lGo'); go.hidden = false;
+  if (MP.offerPJ) { const b = document.getElementById('mpBox'); if (b) b.hidden = false; }
   const enter = e => { e.preventDefault(); e.stopPropagation(); go.hidden = true; enterGame(); };
   go.addEventListener('click', enter, { once: true });
   if (new URLSearchParams(location.search).has('autoenter')) setTimeout(() => go.click(), 300);   // for automated checks
@@ -700,6 +703,7 @@ const M = {
 M.ptile = patch(new THREE.MeshStandardMaterial({ map: T.ptD, normalMap: T.ptN, normalScale: new THREE.Vector2(0.45, 0.45), roughnessMap: T.ptR, roughness: 1.0, metalness: 0, envMapIntensity: 1.0 }), 'PTILE');
 M.pceil = patch(new THREE.MeshStandardMaterial({ map: T.ptD, normalMap: T.ptN, normalScale: new THREE.Vector2(0.3, 0.3), roughness: 0.92, metalness: 0, envMapIntensity: 1.6 }), 'PTILE');
 M.pacc = patch(new THREE.MeshStandardMaterial({ map: T.paD, normalMap: T.paN, normalScale: new THREE.Vector2(0.6, 0.6), roughnessMap: T.paR, roughness: 1.0, metalness: 0, envMapIntensity: 1.0 }), 'PTILE');
+M.bacteria = patch(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.018, 0.017, 0.016), roughness: 0.5, metalness: 0.0, envMapIntensity: 0.5 }));
 M.metal = patch(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.86, 0.87, 0.88), roughness: 0.16, metalness: 1.0, envMapIntensity: 1.6 }));
 M.chair = patch(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.05, 0.05, 0.055), roughness: 0.85 }));
 M.sky = patch(new THREE.MeshStandardMaterial({ color: new THREE.Color(0.9, 0.9, 0.9), emissive: new THREE.Color(1, 1, 1), roughness: 1.0 }), true);
@@ -1240,6 +1244,127 @@ const entity = new THREE.Group();
 }
 let entityTimer = 20;   // a short grace period after you arrive
 
+// ───────────────────────────── the Bacteria (Level 0 hunter) ───────────────
+// Placeholder model (converted from a 3MF print file). Wanders the maze, hunts you on sight, faster in the dark.
+const bact = { obj: null, state: 'off', cool: 100 + Math.random() * 80, path: [], repath: 0, look: 0, lastSeen: 0, life: 0, stepT: 0, scareT: 0, wanderGoal: null };
+// The page may not fetch data: URLs, so the model's embedded buffer is decoded here and handed to the loader
+// as an in-memory GLB (no network request beyond the JSON file itself, which is one of the page's own files).
+function loadModelJSON(url, onLoad) {
+  manager.itemStart(url);
+  fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(js => {
+    const uri = js.buffers[0].uri, b64 = uri.slice(uri.indexOf(',') + 1);
+    const raw = atob(b64), bin = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);
+    delete js.buffers[0].uri;
+    let jsonBytes = new TextEncoder().encode(JSON.stringify(js));
+    const jpad = (4 - jsonBytes.length % 4) % 4, bpad = (4 - bin.length % 4) % 4;
+    const total = 12 + 8 + jsonBytes.length + jpad + 8 + bin.length + bpad, glb = new ArrayBuffer(total), dv = new DataView(glb), u8 = new Uint8Array(glb);
+    dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+    dv.setUint32(12, jsonBytes.length + jpad, true); dv.setUint32(16, 0x4E4F534A, true); u8.set(jsonBytes, 20); u8.fill(0x20, 20 + jsonBytes.length, 20 + jsonBytes.length + jpad);
+    const bo = 20 + jsonBytes.length + jpad;
+    dv.setUint32(bo, bin.length + bpad, true); dv.setUint32(bo + 4, 0x004E4942, true); u8.set(bin, bo + 8);
+    new GLTFLoader().parse(glb, '', g => { onLoad(g); manager.itemEnd(url); }, e => { console.warn('model failed', e); manager.itemError(url); manager.itemEnd(url); });
+  }).catch(e => { console.warn('model failed', url, e); manager.itemError(url); manager.itemEnd(url); });
+}
+loadModelJSON('models/bacteria.gltf.json', g => {
+  g.scene.traverse(o => { if (o.isMesh) { o.material = M.bacteria; o.castShadow = true; o.frustumCulled = true; } });
+  g.scene.scale.set(0.58, 1, 0.9);                // narrower so the limbs fit through 1.1 m doorways
+  bact.obj = new THREE.Group(); bact.obj.add(g.scene); bact.obj.visible = false; scene.add(bact.obj);
+});
+function edgeOpen(cx, cz, dx, dz) {               // can something walk from cell (cx,cz) to its neighbour?
+  const code = dx === 1 ? wallCode(cx + 1, cz, 0) : dx === -1 ? wallCode(cx, cz, 0) : dz === 1 ? wallCode(cx, cz + 1, 1) : wallCode(cx, cz, 1);
+  const k = Math.floor(code / 50); return code === 0 || k === 2 || k === 3 || k === 4 || k === 5;
+}
+function gapPoint(cx, cz, dx, dz) {               // where on the shared edge the opening is
+  const code = dx === 1 ? wallCode(cx + 1, cz, 0) : dx === -1 ? wallCode(cx, cz, 0) : dz === 1 ? wallCode(cx, cz + 1, 1) : wallCode(cx, cz, 1);
+  const k = Math.floor(code / 50); let t = S / 2;
+  if (k === 2) t = S * (0.3 + 0.4 * (code % 50) / 49); else if (k === 3) t = S * 0.75; else if (k === 4) t = S * 0.25;
+  if (dx) return [(dx === 1 ? cx + 1 : cx) * S, cz * S + t];
+  return [cx * S + t, (dz === 1 ? cz + 1 : cz) * S];
+}
+function findPath(sx, sz, gx, gz, R = 14) {        // BFS over the cell grid; returns waypoints (gap points + cell centres)
+  const key = (x, z) => x + ',' + z, prev = new Map([[key(sx, sz), null]]), q = [[sx, sz]];
+  const D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  while (q.length) {
+    const [x, z] = q.shift(); if (x === gx && z === gz) break;
+    for (const [dx, dz] of D) { const nx = x + dx, nz = z + dz;
+      if (Math.abs(nx - sx) > R || Math.abs(nz - sz) > R || prev.has(key(nx, nz)) || !edgeOpen(x, z, dx, dz)) continue;
+      prev.set(key(nx, nz), [x, z, dx, dz]); q.push([nx, nz]); }
+    if (prev.size > 1400) break;
+  }
+  if (!prev.has(key(gx, gz))) return null;
+  const wps = []; let cur = [gx, gz];
+  while (true) { const p = prev.get(key(cur[0], cur[1])); if (!p) break; const [px, pz, dx, dz] = p;
+    wps.push([(cur[0] + 0.5) * S, (cur[1] + 0.5) * S]); wps.push(gapPoint(px, pz, dx, dz)); cur = [px, pz]; }
+  return wps.reverse();
+}
+function bactSpawn() {
+  for (let tries = 0; tries < 6; tries++) {
+    const a = Math.random() * Math.PI * 2, r = 22 + Math.random() * 12;
+    const cx = Math.floor((player.x + Math.cos(a) * r) / S), cz = Math.floor((player.z + Math.sin(a) * r) / S);
+    const x = (cx + 0.5) * S, z = (cz + 0.5) * S;
+    if (visJS(player.x, player.z, x, z) > 0.5) continue;                          // never pop in where you can see
+    if (!findPath(cx, cz, Math.floor(player.x / S), Math.floor(player.z / S))) continue;
+    bact.obj.position.set(x, 0, z); bact.obj.visible = true; bact.state = 'wander'; bact.path = []; bact.life = 0; bact.lastSeen = -99;
+    return true;
+  }
+  return false;
+}
+function bactHide(cool = 120 + Math.random() * 120) { bact.state = 'off'; bact.cool = cool; if (bact.obj) bact.obj.visible = false; }
+function bactUpdate(dt, t) {
+  if (!bact.obj) return;
+  if (LEVEL !== 0 || switching) { if (bact.state !== 'off') bactHide(); return; }
+  if (bact.state === 'off') { if ((bact.cool -= dt) < 0) { if (!bactSpawn()) bact.cool = 2; } return; }
+  const o = bact.obj, ex = o.position.x, ez = o.position.z, d = Math.hypot(player.x - ex, player.z - ez);
+  if (bact.state === 'scare') {                    // lunge in your face, then you're gone
+    camera.getWorldDirection(fwd); o.position.set(player.x + fwd.x * 0.9, player.y - 0.9, player.z + fwd.z * 0.9);
+    o.rotation.set(0.15 * Math.sin(t * 40), Math.atan2(player.x - o.position.x, player.z - o.position.z), 0.1 * Math.sin(t * 33));
+    if ((bact.scareT -= dt) <= 0) {
+      const a = Math.random() * Math.PI * 2, r = 400 + Math.random() * 600;
+      bactHide(); teleportTo(player.x + Math.cos(a) * r, player.z + Math.sin(a) * r);
+    }
+    return;
+  }
+  bact.life += dt;
+  // can it see you?
+  if ((bact.look -= dt) <= 0) {
+    bact.look = 0.25;
+    const sees = d < 24 && visJS(ex, ez, player.x, player.z) > 0.5;
+    if (sees) { if (bact.state !== 'chase') playSample(scareKey(), 1.0, { x: ex, z: ez, rate: 0.8 }); bact.state = 'chase'; bact.lastSeen = t; }
+    else if (bact.state === 'chase' && t - bact.lastSeen > 7) { bact.state = 'wander'; bact.path = []; }
+  }
+  if (bact.state === 'wander' && (bact.life > 150 || d > 55)) { bactHide(); return; }
+  // where to go
+  const ecx = Math.floor(ex / S), ecz = Math.floor(ez / S);
+  if ((bact.repath -= dt) <= 0 || !bact.path.length) {
+    bact.repath = bact.state === 'chase' ? 0.4 : 3;
+    if (bact.state === 'chase') bact.path = findPath(ecx, ecz, Math.floor(player.x / S), Math.floor(player.z / S)) || [];
+    else { const gx = ecx + Math.round((Math.random() - 0.5) * 8), gz = ecz + Math.round((Math.random() - 0.5) * 8); bact.path = findPath(ecx, ecz, gx, gz, 6) || []; }
+  }
+  let tx, tz;
+  const direct = bact.state === 'chase' && d < 6 && visJS(ex, ez, player.x, player.z) > 0.5;
+  if (direct) { tx = player.x; tz = player.z; }
+  else if (bact.path.length) { [tx, tz] = bact.path[0]; if (Math.hypot(tx - ex, tz - ez) < 0.3) { bact.path.shift(); if (bact.path.length) [tx, tz] = bact.path[0]; } }
+  // move: slow drift when wandering; faster in the light, much faster in the dark when hunting
+  const lit = Math.min(1, localLight(ex, ez, t) * 0.35);
+  const speed = bact.state === 'chase' ? (lit > 0.45 ? 3.7 : 5.0) : 1.1;
+  if (tx !== undefined) {
+    const vx = tx - ex, vz = tz - ez, l = Math.hypot(vx, vz);
+    if (l > 1e-3) { const st = Math.min(l, speed * dt); o.position.x += vx / l * st; o.position.z += vz / l * st;
+      const want = Math.atan2(vx, vz); let dy = want - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * Math.min(1, dt * 8); }
+  }
+  // twitchy, unnatural motion + skittering footsteps
+  const hunt = bact.state === 'chase';
+  o.rotation.z = (hunt ? 0.05 : 0.02) * Math.sin(t * (hunt ? 23 : 7)) + (Math.random() < 0.02 ? (Math.random() - 0.5) * 0.15 : 0);
+  o.position.y = Math.abs(Math.sin(t * (hunt ? 14 : 5))) * (hunt ? 0.05 : 0.02);
+  if ((bact.stepT -= dt) <= 0) { bact.stepT = hunt ? 0.17 : 0.55;
+    playSample(Math.random() < 0.5 ? 'carpet1' : 'carpet2', hunt ? 0.9 : 0.5, { x: o.position.x, z: o.position.z, rate: 0.55 + Math.random() * 0.2, lowpass: 1800 }); }
+  // caught
+  if (hunt && d < 0.95 && !switching) {
+    bact.state = 'scare'; bact.scareT = 0.75;
+    playSample(scareKey(), 1.6, { rate: 1.15 }); playSample('scareT', 1.3, { verb: true });
+  }
+}
+
 // ───────────────────────────── flashlight ──────────────────────────────────
 // the Poolrooms' sun: a directional light whose shadow map is only re-rendered when the player moves on
 const SUN_DIR = new THREE.Vector3(0.5, 1.0, 0.33).normalize();
@@ -1535,6 +1660,19 @@ $('tJump').addEventListener('touchstart', e => { e.preventDefault(); jump(); }, 
   $('cClose').addEventListener('click', close);
   pnl.addEventListener('click', e => { if (e.target === pnl) close(e); });
   for (const ev of ['mousedown', 'touchstart']) pnl.addEventListener(ev, e => e.stopPropagation(), { passive: true }); }
+// teleport (used by the Bacteria's catch)
+function teleportTo(x, z) {
+  if (switching) return; switching = true; fadeTarget = 1;
+  setTimeout(() => {
+    x = (Math.floor(x / S) + 0.5) * S; z = (Math.floor(z / S) + 0.5) * S;      // land in the middle of a cell, never in a wall
+    player.x = x; player.z = z; player.vx = player.vz = player.vy = 0;
+    if (LEVEL === 1) pregions.clear();
+    for (const [, c] of chunks) disposeChunk(c); chunks.clear(); worldCenter = null; sunKey = '';
+    player.y = player.ground = groundAt(x, z);
+    updateWorldTex(Math.floor(x / S), Math.floor(z / S)); streamChunks(x, z, 99); if (LEVEL === 1) trackSun();
+    entity.visible = false; if (bact.state !== 'scare') bactHide(60 + Math.random() * 60); fadeTarget = 0; setTimeout(() => { switching = false; }, 600);
+  }, 700);
+}
 function syncLevelButton() { const b = $('tLevel'); if (b) b.textContent = LEVEL === 1 ? 'LEVEL 0' : 'POOLROOMS'; }
 if (touch.on) {
   addEventListener('touchstart', e => {
@@ -1589,6 +1727,191 @@ function respawn() {
     entity.visible = false; fadeTarget = 0; respawning = false;
     showMsg('You woke up somewhere else. It looks the same.', 5);
   }, 2600);
+}
+
+// ───────────────────────────── multiplayer (claude.ai room) ────────────────
+// Everyone with this game open right now shares a room. Each page publishes its own state as presence
+// (~12×/s); others render it as a coloured figure. Newcomers adopt the world seed of whoever has been
+// playing longest, so everyone walks the same infinite maze.
+const MP = { room: null, t0: Date.now(), avatars: new Map(), sendT: 0, settled: false, online: 1 };
+const AV_COLORS = [0xd9534f, 0x5bc0de, 0x9b59b6, 0xf0ad4e, 0x5cb85c, 0xe67e22, 0x1abc9c, 0xff66aa];
+function avatarFor(peer) {
+  let a = MP.avatars.get(peer.peer); if (a) return a;
+  let h = 0; for (const ch of peer.peer) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const col = new THREE.Color(AV_COLORS[h % AV_COLORS.length]);
+  const mat = patch(new THREE.MeshStandardMaterial({ color: col, roughness: 0.55 })), dark = patch(new THREE.MeshStandardMaterial({ color: 0x1c1a16, roughness: 0.8 }));
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.62, 4, 12), mat); body.position.y = 1.12; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), mat); head.position.y = 1.65; g.add(head);
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.05), dark); visor.position.set(0, 1.67, 0.13); g.add(visor);   // shows which way they face
+  for (const sx of [-0.1, 0.1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.6, 4, 8), dark); leg.position.set(sx, 0.38, 0); g.add(leg); }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  // floating tag
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d');
+  x.fillStyle = 'rgba(0,0,0,0.45)'; x.fillRect(0, 8, 256, 48); x.fillStyle = '#' + col.getHexString(); x.font = 'bold 34px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('Player ' + peer.peer.slice(0, 4).toUpperCase(), 128, 33);
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: true, transparent: true }));
+  tag.scale.set(0.9, 0.225, 1); tag.position.y = 2.05; g.add(tag);
+  g.visible = false; scene.add(g);
+  a = { g, x: 0, y: 0, z: 0, yaw: 0, have: false, walked: 0 }; MP.avatars.set(peer.peer, a); return a;
+}
+function dropAvatar(id) { const a = MP.avatars.get(id); if (!a) return; scene.remove(a.g); a.g.traverse(o => { if (o.isMesh) o.geometry.dispose(); }); MP.avatars.delete(id); }
+function reseed(seed) {                           // switch to someone else's world
+  SEED = seed; regions.clear(); pregions.clear(); stairLinks.clear(); collected.clear();
+  setLevel(LEVEL);
+}
+function oldestPeer() {
+  let best = null;
+  if (MP.kind === 'pj' && !MP.isHost) { const h = MP.room.peers().find(p => p.peer === 'h'); return h && typeof h.presence?.seed === 'number' ? { ...h, presence: { ...h.presence, t0: -1 } } : null; }
+  for (const p of MP.room.peers()) {
+    if (p.sameTab || p.kind !== 'viewer') continue;
+    const pr = p.presence || {};
+    if (typeof pr.seed !== 'number' || typeof pr.t0 !== 'number') continue;
+    if (!best || pr.t0 < best.presence.t0) best = p;
+  }
+  return best;
+}
+function maybeAdoptSeed(inGame) {
+  const o = oldestPeer();
+  if (!o || o.presence.t0 >= MP.t0 || o.presence.seed === SEED) return;
+  if (!inGame) { reseed(o.presence.seed); return; }
+  if (switching) return; switching = true; fadeTarget = 1;          // mid-game: fade over to their world
+  setTimeout(() => { reseed(o.presence.seed); fadeTarget = 0; setTimeout(() => { switching = false; }, 600); }, 800);
+}
+function sendPresence() {
+  if (!MP.room) return;
+  MP.room.presence({ seed: SEED, t0: MP.t0, lvl: LEVEL, fl: FLOOR, x: Math.round(player.x * 100) / 100, y: Math.round(player.y * 100) / 100,
+    z: Math.round(player.z * 100) / 100, yaw: Math.round(player.yaw * 100) / 100 }).catch(() => {});
+}
+// ---- PeerJS rooms (outside claude.ai): the host relays everyone's presence; same API as the claude.ai room ----
+// Adapted from the netRoom layer in the user's Bayside Heat file.
+function netRoom(isHost) {
+  const R = { me: isHost ? 'h' : null, peers: new Map(), hs: [], errs: [], conns: new Map(), n: 0, ok: isHost, mine: {}, hostConn: null, closed: false, onClose: null, onWelcome: null };
+  const self = () => ({ peer: R.me, by: null, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence: R.mine, updatedAt: Date.now() });
+  if (isHost) R.peers.set('h', self());
+  const fire = (joined, left, updated) => { const arr = [...R.peers.values()]; for (const h of R.hs.slice()) try { h({ peers: arr, joined, left, updated }); } catch (e) {} };
+  const upsert = (id, p) => { if (typeof id !== 'string' || !p || typeof p !== 'object' || Array.isArray(p)) return; let js; try { js = JSON.stringify(p); } catch (e) { return; } if (js.length > 6000) return;
+    const ex = R.peers.get(id), e = { peer: id, by: null, isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: p, updatedAt: Date.now() }; R.peers.set(id, e); fire(ex ? [] : [e], [], ex ? [e] : []); };
+  const remove = id => { const ex = R.peers.get(id); if (ex && !ex.isMe) { R.peers.delete(id); fire([], [ex], []); } };
+  R.bcast = (m, except) => { for (const c of R.conns.values()) if (c !== except) c.send(m); };
+  R.fail = () => { if (R.closed) return; R.closed = true; R.ok = false; for (const f of R.errs.slice()) try { f({ code: 'upstream_error', message: 'connection lost' }); } catch (e) {} R.shut(); };
+  R.shut = () => { for (const c of R.conns.values()) try { c.close(); } catch (e) {} if (R.hostConn) try { R.hostConn.close(); } catch (e) {} if (R.onClose) try { R.onClose(); } catch (e) {} };
+  R.addConn = w => { if (R.closed) return; const id = 'c' + (++R.n); R.conns.set(id, w);
+    const all = {}; for (const [k, v] of R.peers) all[k] = v.presence; w.send({ t: 'W', you: id, all });
+    w.onmsg = m => { if (m && m.t === 'p') { upsert(id, m.p); R.bcast({ t: 'P', id, p: m.p }, w); } };
+    w.onclose = () => { if (!R.conns.has(id)) return; R.conns.delete(id); remove(id); R.bcast({ t: 'L', id }); }; };
+  R.setHost = w => { R.hostConn = w; w.onmsg = m => { if (!m || typeof m !== 'object') return;
+      if (m.t === 'W' && typeof m.you === 'string' && !R.me) { R.me = m.you; R.ok = true; R.peers.set(R.me, self());
+        if (m.all && typeof m.all === 'object') for (const k of Object.keys(m.all).slice(0, 32)) if (k !== R.me) upsert(k, m.all[k]);
+        if (R.onWelcome) R.onWelcome(); w.send({ t: 'p', p: R.mine }); }
+      else if (m.t === 'P' && m.id !== R.me) upsert(m.id, m.p); else if (m.t === 'L') remove(m.id); };
+    w.onclose = () => R.fail(); };
+  R.api = { presence: async patch => { for (const k in patch) { if (patch[k] === null) delete R.mine[k]; else R.mine[k] = patch[k]; } if (R.me) { const e = R.peers.get(R.me); if (e) e.presence = R.mine; }
+      if (isHost) R.bcast({ t: 'P', id: 'h', p: R.mine }); else if (R.hostConn && R.me) R.hostConn.send({ t: 'p', p: R.mine }); },
+    peers: () => [...R.peers.values()],
+    onPeers: (h, err) => { R.hs.push(h); if (err) R.errs.push(err); setTimeout(() => { if (R.hs.includes(h)) { const arr = [...R.peers.values()]; h({ peers: arr, joined: arr, left: [], updated: [] }); } }, 0);
+      return () => { R.hs = R.hs.filter(x => x !== h); R.errs = R.errs.filter(x => x !== err); }; },
+    connected: () => R.ok && !R.closed,
+    leave: async () => { if (R.closed) return; R.closed = true; R.ok = false; R.shut(); } };
+  return R;
+}
+function wrapPJ(dc) { const w = { send: o => { try { if (dc.open) dc.send(o); } catch (e) {} }, close: () => { try { dc.close(); } catch (e) {} }, onmsg: null, onclose: null, onopen: null }; let shut = false;
+  const cl = () => { if (shut) return; shut = true; if (w.onclose) w.onclose(); };
+  dc.on('data', d => { if (w.onmsg) w.onmsg(d); }); dc.on('close', cl); dc.on('error', cl); dc.on('open', () => { if (w.onopen) w.onopen(); }); return w; }
+let peerLib = null;
+function loadPeerJS() { if (window.Peer) return Promise.resolve(window.Peer); if (peerLib) return peerLib;
+  const urls = ['https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js', 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'];
+  peerLib = new Promise((res, rej) => { let i = 0; const next = () => { if (i >= urls.length) { peerLib = null; rej(new Error('PeerJS could not load')); return; }
+    const sc = document.createElement('script'); sc.src = urls[i++]; sc.async = true; sc.onload = () => window.Peer ? res(window.Peer) : next(); sc.onerror = next; document.head.appendChild(sc); }; next(); });
+  return peerLib; }
+const PJ_PREFIX = 'backrooms-lvl0-room-';
+async function pjHost(code) { const Peer = await loadPeerJS(); return new Promise((res, rej) => { const peer = new Peer(PJ_PREFIX + code, { debug: 0 }); let up = false;
+  peer.on('open', () => { up = true; const R = netRoom(true); R.onClose = () => { try { peer.destroy(); } catch (e) {} };
+    peer.on('connection', dc => { const w = wrapPJ(dc); if (dc.open) R.addConn(w); else w.onopen = () => R.addConn(w); });
+    peer.on('disconnected', () => { if (!R.closed) setTimeout(() => { try { if (!R.closed && peer.disconnected) peer.reconnect(); } catch (e) {} }, 1500); }); res(R.api); });
+  peer.on('error', e => { if (!up) { try { peer.destroy(); } catch (x) {} rej(e); } }); }); }
+async function pjJoin(code) { const Peer = await loadPeerJS(); return new Promise((res, rej) => { const peer = new Peer({ debug: 0 }); let done = false;
+  const to = setTimeout(() => { if (!done) { done = true; try { peer.destroy(); } catch (e) {} rej({ type: 'timeout' }); } }, 16000);
+  peer.on('open', () => { const dc = peer.connect(PJ_PREFIX + code, { serialization: 'json', reliable: true }); const w = wrapPJ(dc), R = netRoom(false);
+    R.onClose = () => { try { peer.destroy(); } catch (e) {} }; R.onWelcome = () => { if (done) return; done = true; clearTimeout(to); res(R.api); }; R.setHost(w); });
+  peer.on('error', e => { if (!done) { done = true; clearTimeout(to); try { peer.destroy(); } catch (x) {} rej(e); } }); }); }
+
+function showRoomTag() {
+  const t = document.getElementById('roomTag'); if (!t) return;
+  if (!MP.room || MP.kind !== 'pj') { t.hidden = true; return; }
+  t.hidden = false; t.textContent = `ROOM ${MP.code} · ${MP.online} ONLINE`;
+}
+function mpAttach(room, kind) {                   // works for the claude.ai room and the PeerJS room alike
+  MP.room = room; MP.kind = kind; sendPresence();
+  room.onPeers(ch => {
+    MP.online = ch.peers.filter(p => p.kind === 'viewer').length || 1;
+    for (const p of ch.left) dropAvatar(p.peer);
+    if (!LOAD.mp) { LOAD.mpText = MP.online > 1 ? `${MP.online} players online` : 'connecting…'; loaderUI(); }
+    if (MP.settled) maybeAdoptSeed(true);
+    showRoomTag();
+  }, () => { MP.room = null; showRoomTag(); });
+}
+(async () => {
+  let room = null;
+  try { room = window.claude && window.claude.use ? await window.claude.use('room') : null; } catch (e) { room = null; }
+  if (!room) {                                    // not on claude.ai: solo, or host/join a PeerJS room from the loading screen
+    MP.offerPJ = true; LOAD.mp = true; LOAD.mpText = 'solo · or play online below'; loaderCheck(); return;
+  }
+  mpAttach(room, 'claude');
+  setTimeout(() => {                              // give everyone a moment to answer, then join the oldest world
+    maybeAdoptSeed(false); MP.settled = true;
+    LOAD.mp = true; LOAD.mpText = MP.online > 1 ? `${MP.online} players online` : 'online — no one else here'; loaderCheck();
+  }, 2500);
+})();
+// loading-screen buttons for PeerJS play
+{ const box = () => document.getElementById('mpBox'), msg = t => { const m = document.getElementById('mpMsg'); if (m) m.textContent = t; };
+  const busy = on => { for (const el of document.querySelectorAll('#mpBox button, #mpCode, #lGo')) el.disabled = on; };
+  const CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  document.getElementById('mpHost')?.addEventListener('click', async () => {
+    busy(true); msg('Creating a room…');
+    for (let tries = 0; tries < 3; tries++) {
+      let code = ''; for (let i = 0; i < 6; i++) code += CH[Math.floor(Math.random() * CH.length)];
+      try { const api = await pjHost(code); MP.code = code; MP.isHost = true; mpAttach(api, 'pj'); MP.settled = true; msg(`Room ${code} is open — share the code!`); setTimeout(() => enterGame(), 700); return; }
+      catch (e) { if (!(e && e.type === 'unavailable-id')) { msg('Could not reach the online service. Check your internet and try again.'); busy(false); return; } }
+    }
+    msg('Could not create a room. Try again.'); busy(false);
+  });
+  document.getElementById('mpJoinForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const code = (document.getElementById('mpCode').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 6) { msg('Room codes have 6 characters.'); return; }
+    busy(true); msg('Joining ' + code + '…');
+    try { const api = await pjJoin(code); MP.code = code; MP.isHost = false; mpAttach(api, 'pj');
+      maybeAdoptSeed(false); MP.settled = true; msg('Joined!'); setTimeout(() => enterGame(), 500); }
+    catch (err) { msg(err && err.type === 'peer-unavailable' ? 'No room with that code. Check it with the host.' : err && err.type === 'timeout' ? 'The host did not answer. Try again.' : 'Could not join. Check your internet and the code.'); busy(false); }
+  });
+}
+function mpUpdate(dt, t) {
+  if (!MP.room) return;
+  if ((MP.sendT -= dt) <= 0) { MP.sendT = 1 / 12; sendPresence(); }
+  const seen = new Set();
+  for (const p of MP.room.peers()) {
+    if (p.sameTab || p.kind !== 'viewer') continue;
+    const pr = p.presence || {};
+    if (typeof pr.x !== 'number' || typeof pr.z !== 'number') continue;
+    seen.add(p.peer);
+    const a = avatarFor(p), here = pr.seed === SEED && pr.lvl === LEVEL && pr.fl === FLOOR;
+    a.g.visible = here && running;
+    if (!here) { a.have = false; continue; }
+    const tx = pr.x, ty = typeof pr.y === 'number' ? pr.y : 0, tz = pr.z, tyaw = typeof pr.yaw === 'number' ? pr.yaw : 0;
+    if (!a.have) { a.x = tx; a.y = ty; a.z = tz; a.yaw = tyaw; a.have = true; }
+    const k = 1 - Math.exp(-dt * 12), ox = a.x, oz = a.z;         // smooth between updates
+    a.x += (tx - a.x) * k; a.y += (ty - a.y) * k; a.z += (tz - a.z) * k;
+    let dy = tyaw - a.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.yaw += dy * k;
+    const step = Math.hypot(a.x - ox, a.z - oz);
+    a.g.position.set(a.x, a.y + Math.abs(Math.sin(t * 9)) * Math.min(0.04, step * 3), a.z); a.g.rotation.y = a.yaw + Math.PI;
+    if ((a.walked += step) > 0.75) {              // their footsteps, from where they are
+      a.walked = 0;
+      const wade = LEVEL === 1 && a.y < -0.1, kind = wade ? 'wade' : LEVEL === 1 ? 'tile' : 'carpet';
+      playSample(kind + (Math.random() < 0.5 ? 1 : 2), 0.6, { x: a.x, z: a.z, rate: 0.9 + Math.random() * 0.2, lowpass: kind === 'carpet' ? 1300 : undefined });
+    }
+  }
+  for (const id of [...MP.avatars.keys()]) if (!seen.has(id)) dropAvatar(id);
 }
 
 // ───────────────────────────── main loop ───────────────────────────────────
@@ -1739,6 +2062,8 @@ function tick() {
       const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 10;
       playSample(scareKey(), 0.35, { x: player.x + Math.cos(a) * r, z: player.z + Math.sin(a) * r, lowpass: 1500, rate: 0.85 + Math.random() * 0.2 });
     }
+    bactUpdate(dt, t);
+    mpUpdate(dt, t);
     knockT -= dt;
     if (knockT < 0) { // distant knocks and footsteps that aren't yours
       knockT = 8 + Math.random() * 25 * (0.4 + player.sanity);
@@ -1823,18 +2148,23 @@ setTimeout(() => {                                // never hang forever: after 2
   if (LOAD.finished) return;
   if (!LOAD.texDone) { LOAD.texDone = true; LOAD.fails.push({ kind: 'tex', url: 'timeout' }); }
   if (!LOAD.audDone) { LOAD.audDone = true; LOAD.fails.push({ kind: 'aud', url: 'timeout' }); }
-  LOAD.shaders = true; loaderCheck();
+  LOAD.shaders = true; if (!LOAD.mp) { LOAD.mp = true; LOAD.mpText = 'solo'; } loaderCheck();
 }, 25000);
 function enterGame() {
+  if (enterGame.done) return; enterGame.done = true;
   const L = document.getElementById('loader');
   initAudio(); A.ctx?.resume?.();
   if (A.ambG && A.ctx) { const at = A.ctx.currentTime; A.ambG.gain.cancelScheduledValues(at); A.ambG.gain.setValueAtTime(0, at); A.ambG.gain.linearRampToValueAtTime(3.6, at + 1.8); }
   L.classList.add('finishing');                   // "FINISHED" while the ambience swells in
+  showRoomTag();
   setTimeout(() => {
     running = true; started = true; startTime = performance.now(); clock.getDelta();
     L.classList.add('out'); setTimeout(() => L.remove(), 1300);
   }, 2200);
 }
 if (TEST) { running = true; started = true; startTime = performance.now(); document.getElementById('loader')?.remove(); }
-if (TEST) { const sp = new URLSearchParams(location.search); setQuality(+(sp.get('q') ?? 1)); setFilter(+(sp.get('f') ?? 0)); player.pitch = +(sp.get('p') ?? 0); if (sp.get('flash')) toggleFlash(); if (sp.get('s')) player.sanity = +sp.get('s'); if (sp.get('noao') && gtao) gtao.enabled = false; if (sp.get('ent')) setTimeout(() => { const d = +sp.get('ent'); entity.position.set(player.x - Math.sin(player.yaw) * d, 0, player.z - Math.cos(player.yaw) * d); entity.position.y = groundAt(entity.position.x, entity.position.z); entity.userData.d0 = d; entity.userData.seen = false; entity.userData.unseenT = -999; entity.visible = true; }, 400); }
+if (TEST) { const sp = new URLSearchParams(location.search); setQuality(+(sp.get('q') ?? 1)); setFilter(+(sp.get('f') ?? 0)); player.pitch = +(sp.get('p') ?? 0); if (sp.get('flash')) toggleFlash(); if (sp.get('s')) player.sanity = +sp.get('s'); if (sp.get('noao') && gtao) gtao.enabled = false; if (sp.get('bact')) { const tryB = () => { const d = +sp.get('bact'); if (!bact.obj) return setTimeout(tryB, 300); let px0 = 0, pz0 = 0; for (let k = d; k >= 2; k--) { const cx = Math.floor((player.x - Math.sin(player.yaw) * k) / S), cz = Math.floor((player.z - Math.cos(player.yaw) * k) / S);
+      if (findPath(cx, cz, Math.floor(player.x / S), Math.floor(player.z / S))) { px0 = (cx + 0.5) * S; pz0 = (cz + 0.5) * S; break; } }
+    bact.obj.position.set(px0, 0, pz0); bact.obj.visible = !sp.get('bnovis'); bact.state = sp.get('bchase') ? 'chase' : 'wander'; bact.life = 0; bact.lastSeen = 1e9; bact.cool = 0; }; setTimeout(tryB, 300); }
+  if (sp.get('ent')) setTimeout(() => { const d = +sp.get('ent'); entity.position.set(player.x - Math.sin(player.yaw) * d, 0, player.z - Math.cos(player.yaw) * d); entity.position.y = groundAt(entity.position.x, entity.position.z); entity.userData.d0 = d; entity.userData.seen = false; entity.userData.unseenT = -999; entity.visible = true; }, 400); }
 tick();

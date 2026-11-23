@@ -40,6 +40,15 @@
   .lfinish { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:600 clamp(28px, 7vw, 54px) Georgia, serif;
     letter-spacing:.3em; color:#efe2a0; opacity:0; pointer-events:none; transition:opacity .9s; text-shadow:0 0 30px rgba(240,220,120,.35); }
   #loader.finishing .lwrap { opacity:0; } #loader.finishing .lfinish { opacity:1; }
+  #mpBox { margin-top:18px; }
+  .mpor { font-size:12px; letter-spacing:.2em; color:#8f8656; margin-bottom:10px; }
+  .mpbtn { font:600 13px system-ui; letter-spacing:.15em; color:#e9dc9a; background:transparent; border:1px solid rgba(233,220,154,.45); border-radius:6px; padding:9px 14px; cursor:pointer; }
+  .mpbtn:disabled { opacity:.4; cursor:wait; }
+  .mprow { display:flex; gap:8px; justify-content:center; margin-top:8px; }
+  #mpCode { width:130px; font:600 15px system-ui; letter-spacing:.25em; text-transform:uppercase; text-align:center; color:#e9dc9a; background:#0c0b06; border:1px solid #4d4626; border-radius:6px; padding:8px; }
+  .mpmsg { min-height:1.3em; margin-top:8px; font-size:13px; color:#cbbd78; }
+  #roomTag { position:fixed; top:14px; left:52px; z-index:6; pointer-events:none; font:600 12px/1 system-ui; letter-spacing:.12em; color:rgba(240,230,180,.8);
+    background:rgba(0,0,0,.3); border:1px solid rgba(240,230,180,.3); border-radius:14px; padding:8px 12px; }
   #credits { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
   #credits[hidden] { display:none; }
   .cbox { max-width:min(560px, 90vw); max-height:85vh; overflow:auto; background:#141410; color:#e8e2c4; border:1px solid rgba(240,230,180,.25);
@@ -63,16 +72,24 @@
     <div class="lsub" id="lSub">LOADING</div>
     <div class="lbar"><i id="lBar"></i></div>
     <ul class="lchecks">
-      <li id="lc-tex"><span class="st">…</span>Textures <em></em></li>
+      <li id="lc-tex"><span class="st">…</span>Textures &amp; models <em></em></li>
       <li id="lc-aud"><span class="st">…</span>Audio <em></em></li>
       <li id="lc-wld"><span class="st">…</span>World <em></em></li>
       <li id="lc-shd"><span class="st">…</span>Shaders <em></em></li>
+      <li id="lc-mp"><span class="st">…</span>Multiplayer <em></em></li>
     </ul>
     <div class="lwarn" id="lWarn"></div>
     <button id="lGo" hidden>ENTER</button>
+    <div id="mpBox" hidden>
+      <div class="mpor">— or play online with friends —</div>
+      <button class="mpbtn" id="mpHost">HOST ONLINE GAME</button>
+      <form class="mprow" id="mpJoinForm"><input id="mpCode" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="mpbtn" type="submit">JOIN</button></form>
+      <div class="mpmsg" id="mpMsg"></div>
+    </div>
   </div>
   <div class="lfinish" id="lFinish">FINISHED</div>
 </div>
+<div id="roomTag" hidden></div>
 <div id="credits" hidden>
   <div class="cbox">
     <h2>Credits</h2>

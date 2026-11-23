@@ -1,0 +1,25 @@
+THE BACKROOMS: PLAYING ONLINE WITH FRIENDS (PeerJS)
+
+The game needs to be served from a web address. Double-clicking index.html
+won't work, because browsers block game files opened straight from disk.
+Pick one option:
+
+A) Free hosting (easiest, and works for friends anywhere)
+   1. Unzip this folder.
+   2. Open https://app.netlify.com/drop and drag the folder onto the page.
+      GitHub Pages, itch.io (HTML game upload) or Cloudflare Pages also work.
+   3. Share the link with your friends.
+
+B) On your own computer (friends on other devices need option A)
+   In the unzipped folder, run:  python -m http.server 8000
+   Then open http://localhost:8000
+
+PLAYING TOGETHER
+   - One player waits for the loading screen to finish and presses
+     HOST ONLINE GAME. A 6-letter room code appears at the top of the screen.
+   - The other players type that code in the box and press JOIN.
+   - Everyone spawns in the host's world, so the map is the same for all.
+   - ENTER on its own plays solo.
+
+Connections go player-to-player through the free PeerJS service, so you need
+internet access. Some strict school or work networks block it.
