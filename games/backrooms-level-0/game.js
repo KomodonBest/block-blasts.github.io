@@ -15,6 +15,9 @@ const TEST = location.hash === '#test';
 const S = 3.0;          // cell size (m)
 let H = 2.7;            // ceiling height (m) — per level
 let LEVEL = 0;          // 0 = Level 0 (the lobby), 1 = the Poolrooms
+let FLOOR = 0;          // Poolrooms storey: 0 ground, 1 and 2 above (linked by the tiled staircases)
+const TOP_FLOOR = 2;
+const stairLinks = new Map();   // 'floor:cx,cz' -> floor the doorway at the top of those stairs leads to
 const PD = 0.5;         // pool depth below the walkway
 const WATER_Y = -0.14;  // water surface height
 const CH = 8;           // cells per chunk side
@@ -160,16 +163,16 @@ function region0(rx, rz) {
 const PA = { HALL: 10, ROOMS: 11, COLON: 12, TUNNEL: 13, OPEN: 14 };
 function archPool(rx, rz) {
   if (rx === 0 && rz === 0) return PA.HALL;
-  const b = (hash(rx, rz, 31) >>> 8) % 100;
+  const b = (hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 31) >>> 8) % 100;
   return b < 18 ? PA.HALL : b < 50 ? PA.ROOMS : b < 62 ? PA.COLON : b < 82 ? PA.TUNNEL : PA.OPEN;
 }
 const POPEN = a => a === PA.HALL || a === PA.OPEN || a === PA.COLON;
 const ARCH_CODE = 250;                              // wall kind 5: tiled wall pierced by a circular arch
 const pregions = new Map();
 function poolRegion(rx, rz) {
-  const key = rx + ',' + rz; let L = pregions.get(key); if (L) return L;
+  const key = FLOOR + ':' + rx + ',' + rz; let L = pregions.get(key); if (L) return L;
   if (pregions.size > 3000) pregions.clear();
-  const A = archPool(rx, rz), r = rngOf(hash(rx, rz, 199)), N = RG * RG;
+  const A = archPool(rx, rz), r = rngOf(hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 199)), N = RG * RG;
   L = { a: A, w0: new Uint8Array(N), w1: new Uint8Array(N), lt: new Uint8Array(N), ph: new Uint8Array(N), pil: new Uint8Array(N), pool: new Uint8Array(N), portal: -1, ladders: [] };
   const I = (x, z) => z * RG + x;
   const rect = (x0, z0, w, d) => { for (let z = z0; z < z0 + d; z++) for (let x = x0; x < x0 + w; x++) L.pool[I(x, z)] = 1; };
@@ -227,17 +230,40 @@ function poolRegion(rx, rz) {
     if (!POPEN(A) && !POPEN(nbA)) { const i = Math.floor(r() * RG); (dir === 0 ? L.w0 : L.w1)[dir === 0 ? I(0, i) : I(i, 0)] = ARCH_CODE; }
   }
   for (let i = 0; i < N; i++) { L.ph[i] = Math.floor(r() * 256); L.lt[i] = r() < skyP ? 1 : 0; }   // 1 = sunlit skylight shaft
-  if (!(rx === 0 && rz === 0) && (hash(rx, rz, 177) >>> 24) < 60) { const i = (hash(rx, rz, 178) >>> 8) % N; if (!L.pool[i]) L.portal = i; }
+  if (!(rx === 0 && rz === 0) && (hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 177) >>> 24) < 60) { const i = (hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 178) >>> 8) % N; if (!L.pool[i]) L.portal = i; }
   if (!(rx === 0 && rz === 0)) {                    // rare special rooms
-    const sp = hash(rx, rz, 191) >>> 24, pick = (hash(rx, rz, 192) >>> 8) % N;
-    if (sp < 26 && A !== PA.HALL) { for (let k = 0; k < N; k++) { const i = (pick + k) % N; if (L.w1[i] === FULL && i >= RG && L.portal !== i) { L.special = { t: 'stairs', i }; break; } } }   // steps up out of the water into a dark doorway
+    const sp = hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 191) >>> 24, pick = (hash(rx + FLOOR * 7919, rz - FLOOR * 6007, 192) >>> 8) % N;
+    if (sp < 26 && A !== PA.HALL && FLOOR < TOP_FLOOR) { for (let k = 0; k < N; k++) { const i = (pick + k) % N; if (L.w1[i] === FULL && i >= RG && L.portal !== i) { L.special = { t: 'stairs', i }; break; } } }   // steps up out of the water into a dark doorway
     else if (sp < 44) { L.special = { t: 'onebeam' }; for (let i = 0; i < N; i++) L.lt[i] = 0; L.lt[I(2, 3)] = 1; }   // a dim flooded hall lit by a single shaft
   }
   if (rx === 0 && rz === 0) { L.pool[I(0, 0)] = 0; L.lt[I(0, 0)] = 1; }
+  // staircases you arrived by (or left from) always exist on this floor: steps against a wall, the way back behind you
+  for (let lz = 0; lz < RG; lz++) for (let lx = 0; lx < RG; lx++) {
+    const cx = rx * RG + lx, cz = rz * RG + lz;
+    if (!stairLinks.has(FLOOR + ':' + cx + ',' + cz)) continue;
+    const i = I(lx, lz);
+    L.special = { t: 'stairs', i }; if (L.portal === i) L.portal = -1;
+    L.w1[i] = FULL;                                   // the wall the steps climb against
+    L.w0[i] = 0; if (lx + 1 < RG) L.w0[I(lx + 1, lz)] = 0; if (lz + 1 < RG) L.w1[I(lx, lz + 1)] = 0;   // keep the way out open
+    L.lt[i] = 1;
+  }
   pregions.set(key, L); return L;
 }
+const lvKey = () => LEVEL === 1 ? '1f' + FLOOR : '0';
 function isPool(cx, cz) { if (LEVEL !== 1) return false; const [L, i] = cellRef(cx, cz); return L.pool[i] === 1; }
-function groundAt(x, z) { return isPool(Math.floor(x / S), Math.floor(z / S)) ? -PD : 0; }
+const STAIR = { n: 9, depth: 0.18, top: 1.75, x0: 0.6, x1: 2.4 };   // tiled steps rising out of the water
+function stairHeight(cx, cz, x, z) {                                   // walkable height of the steps at (x,z), or -Infinity
+  const lx = x - cx * S, d = z - (cz * S + HT);
+  if (lx < STAIR.x0 || lx > STAIR.x1 || d < 0 || d > STAIR.n * STAIR.depth) return -Infinity;
+  const g0 = isPool(cx, cz) ? -PD : 0, k = Math.min(STAIR.n - 1, Math.ceil(STAIR.n - d / STAIR.depth) - 1);
+  return g0 + (k + 1) * (STAIR.top - g0) / STAIR.n;
+}
+function groundAt(x, z) {
+  const cx = Math.floor(x / S), cz = Math.floor(z / S);
+  let g = isPool(cx, cz) ? -PD : 0;
+  if (LEVEL === 1) { const sp = specialAt(cx, cz); if (sp && sp.t === 'stairs') g = Math.max(g, stairHeight(cx, cz, x, z)); }
+  return g;
+}
 function cellRef(cx, cz) { const rx = fdiv(cx, RG), rz = fdiv(cz, RG); return [region(rx, rz), (cz - rz * RG) * RG + (cx - rx * RG)]; }
 // returns code: 0 none, else kind*50+cq  (kind 1 full, 2 door, 3 half-low, 4 half-high)
 function wallCode(cx, cz, dir) { const [L, i] = cellRef(cx, cz); return dir ? L.w1[i] : L.w0[i]; }
@@ -371,6 +397,35 @@ scene.environment = ENVS[0];
 
 // ───────────────────────────── textures & materials ────────────────────────
 const manager = new THREE.LoadingManager();
+// ── loading screen bookkeeping ──
+const LOAD = { tex: [0, 1], texDone: false, aud: [0, 0], audDone: false, world: false, shaders: false, fails: [], finished: false, t0: performance.now() };
+function loaderUI() {
+  const el = id => document.getElementById(id);
+  const set = (id, state, txt) => { const li = el(id); if (!li) return; const st = li.querySelector('.st');
+    st.textContent = state === 'ok' ? '✓' : state === 'bad' ? '!' : '…'; st.className = 'st ' + (state || ''); li.querySelector('em').textContent = txt || ''; };
+  const texBad = LOAD.fails.some(f => f.kind === 'tex'), audBad = LOAD.fails.some(f => f.kind === 'aud');
+  set('lc-tex', LOAD.texDone ? (texBad ? 'bad' : 'ok') : '', `${LOAD.tex[0]}/${LOAD.tex[1]}`);
+  set('lc-aud', LOAD.audDone ? (audBad ? 'bad' : 'ok') : '', `${LOAD.aud[0]}/${LOAD.aud[1]}`);
+  set('lc-wld', LOAD.world ? 'ok' : '', LOAD.world ? 'generated' : '');
+  set('lc-shd', LOAD.shaders ? 'ok' : '', LOAD.shaders ? 'compiled' : '');
+  const p = (LOAD.tex[0] / Math.max(1, LOAD.tex[1])) * 0.45 + (LOAD.aud[0] / Math.max(1, LOAD.aud[1])) * 0.35 + (LOAD.world ? 0.1 : 0) + (LOAD.shaders ? 0.1 : 0);
+  const bar = el('lBar'); if (bar) bar.style.width = Math.round(Math.min(1, p) * 100) + '%';
+  const w = el('lWarn'); if (w) w.textContent = LOAD.fails.length ? `${LOAD.fails.length} file${LOAD.fails.length > 1 ? 's' : ''} failed to load — you can still enter.` : '';
+}
+function loaderCheck() {
+  loaderUI();
+  if (LOAD.finished || !(LOAD.texDone && LOAD.audDone && LOAD.world && LOAD.shaders)) return;
+  LOAD.finished = true;
+  if (!document.getElementById('lSub')) return;
+  document.getElementById('lSub').textContent = LOAD.fails.length ? 'LOADED WITH ERRORS' : 'ALL LOADED';
+  const go = document.getElementById('lGo'); go.hidden = false;
+  const enter = e => { e.preventDefault(); e.stopPropagation(); go.hidden = true; enterGame(); };
+  go.addEventListener('click', enter, { once: true });
+  if (new URLSearchParams(location.search).has('autoenter')) setTimeout(() => go.click(), 300);   // for automated checks
+}
+manager.onProgress = (url, loaded, total) => { LOAD.tex = [loaded, total]; loaderUI(); };
+manager.onError = url => { LOAD.fails.push({ kind: 'tex', url }); console.warn('texture failed', url); };
+manager.onLoad = () => { LOAD.texDone = true; loaderCheck(); };
 const loader = new THREE.TextureLoader(manager);
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 function tex(name, srgb) {
@@ -734,7 +789,6 @@ function chairPlace(cx, cz) {                        // in front of a wall if th
 function specialBoxes(cx, cz, out) {
   const sp = specialAt(cx, cz); if (!sp) return;
   if (sp.t === 'chair') { const [x, z] = chairPlace(cx, cz); out.push([x - 0.3, x + 0.3, z - 0.3, z + 0.3]); }
-  if (sp.t === 'stairs') out.push([cx * S + 0.6, cx * S + 2.4, cz * S, cz * S + 1.75]);
 }
 const exitTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d');
   g.fillStyle = '#06130a'; g.fillRect(0, 0, 256, 96); g.fillStyle = '#4dff7c'; g.font = 'bold 66px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -816,7 +870,7 @@ function buildChunk(kx, kz) {
     }
     { const [RL, ri] = cellRef(cx, cz); if (RL.portal === ri) puddle.disc((cx + 0.5) * S, 0.004, (cz + 0.5) * S, 0.7, 64, false, 0.28); }
     const bt = bottleAt(cx, cz);
-    if (bt && !collected.has(LEVEL + ':' + cx + ',' + cz)) bottles.push({ ...bt, key: LEVEL + ':' + cx + ',' + cz });
+    if (bt && !collected.has(lvKey() + ':' + cx + ',' + cz)) bottles.push({ ...bt, key: lvKey() + ':' + cx + ',' + cz });
   }
   const add = (gb, mat, cast) => { const g = gb.geometry(); if (!g) return; const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.castShadow = !!cast; m.matrixAutoUpdate = false; group.add(m); };
   add(floor, M.floor); add(ceil, M.ceil); add(walls, M.wall, true); add(base, M.base); add(fix, M.fixture); add(plate, M.plate); add(vent, M.vent); add(puddle, M.puddle);
@@ -892,27 +946,53 @@ function archGeometry(ybot) {
   const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * PT, uv.getY(i) * PT);
   g.computeBoundingSphere(); archGeos.set(ybot, g); return g;
 }
-// visible sunbeams: additive light volumes; brightest where you look straight through them
+// visible sunbeams: real volumetric light. Each skylight gets a bounding prism; its back faces ray-march the air
+// inside, testing every sample against the sun's shadow map, so beams take the exact shape of the opening and
+// are cut by walls, coves and columns. Henyey-Greenstein forward scattering makes them glow toward the sun.
 const beamMat = new THREE.ShaderMaterial({
-  uniforms: { uTime: U.uTime, uCol: { value: new THREE.Color(1.0, 0.9, 0.72) }, uI: { value: 0.1 }, uFogD: { value: 0.03 } },
-  vertexShader: /* glsl */`varying vec3 vW; varying vec3 vN; varying float vT;
-    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vT = uv.y;
-      gl_Position = projectionMatrix * viewMatrix * w; }`,
-  fragmentShader: /* glsl */`uniform float uTime; uniform vec3 uCol; uniform float uI; uniform float uFogD;
-    varying vec3 vW; varying vec3 vN; varying float vT;
+  uniforms: { uTime: U.uTime, uCol: { value: new THREE.Color(1.0, 0.91, 0.76) }, uI: { value: 0.14 }, uFogD: { value: 0.03 },
+    uShadowMap: { value: null }, uShadowMatrix: { value: new THREE.Matrix4() }, uHasShadow: { value: 0 }, uSunDir: { value: new THREE.Vector3() },
+    uWaterY: { value: -0.14 }, uH: U.uH },
+  vertexShader: /* glsl */`varying vec3 vW; varying vec3 vN;
+    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normal; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: /* glsl */`
+    #include <packing>
+    uniform float uTime; uniform vec3 uCol; uniform float uI; uniform float uFogD; uniform sampler2D uShadowMap; uniform mat4 uShadowMatrix;
+    uniform float uHasShadow; uniform vec3 uSunDir; uniform float uWaterY; uniform float uH;
+    varying vec3 vW; varying vec3 vN;
     float h3(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
     float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
                  mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+    float sunlit(vec3 p){
+      vec4 sc = uShadowMatrix * vec4(p, 1.0);
+      if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z < 0.0 || sc.z > 1.0) return 0.0;
+      return step(sc.z - 0.0003, unpackRGBAToDepth(texture2D(uShadowMap, sc.xy)));
+    }
     void main(){
-      vec3 V = normalize(cameraPosition - vW);
-      float face = pow(abs(dot(normalize(vN), V)), 2.6);                 // thick through the middle, soft at the silhouette
-      float along = smoothstep(0.0, 0.1, vT) * (1.0 - 0.6 * vT) * smoothstep(1.0, 0.85, vT);
-      float dust = 0.75 + 0.45 * n3(vW * 2.2 + vec3(0.0, -uTime * 0.06, uTime * 0.035));
-      float dist = length(cameraPosition - vW);
-      float near = smoothstep(0.3, 1.8, dist);                            // don't flare when you stand inside one
-      float fog = exp(-uFogD * uFogD * dist * dist * 0.6);
-      gl_FragColor = vec4(uCol * (uI * face * along * dust * near * fog), 1.0);
+      vec3 toFrag = vW - cameraPosition; float tBack = length(toFrag); vec3 rd = toFrag / tBack;
+      if (dot(vN, rd) < 0.0) discard;                                 // only the far side of the volume integrates
+      if (uHasShadow < 0.5) discard;
+      float t0 = max(0.05, tBack - 7.0), len = tBack - t0;
+      const int N = 22;
+      float dt = len / float(N);
+      float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      float acc = 0.0;
+      for (int i = 0; i < N; i++) {
+        float t = t0 + (float(i) + jit) * dt; vec3 p = cameraPosition + rd * t;
+        if (p.y < uWaterY || p.y > uH - 0.12) continue;
+        float lit = sunlit(p);
+        if (lit <= 0.0) continue;
+        float haze = 0.55 + 0.9 * n3(p * 1.3 + vec3(uTime * 0.04, -uTime * 0.02, uTime * 0.03));   // drifting, uneven dust
+        float fall = 0.55 + 0.45 * smoothstep(0.0, uH, p.y);                                     // a touch denser up high
+        acc += lit * haze * fall * dt;
+      }
+      if (acc <= 0.0) discard;
+      // forward scattering: looking towards the sun through a beam makes it blaze, looking away makes it faint
+      float g = 0.55, cosT = dot(-rd, -uSunDir);
+      float phase = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5);
+      float fog = exp(-uFogD * uFogD * tBack * tBack * 0.5);
+      gl_FragColor = vec4(uCol * (uI * acc * phase * fog), 1.0);
     }`,
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
 });
@@ -937,15 +1017,18 @@ function buildChunkPool(kx, kz) {
       ceil.quad([h0, H, j0], [h1, H, j0], [h1, Y, j0], [h0, Y, j0], [0, 0, 1], [h0 * PT, H * PT], [h1 * PT, H * PT], [h1 * PT, Y * PT], [h0 * PT, Y * PT]);
       ceil.quad([h1, H, j1], [h0, H, j1], [h0, Y, j1], [h1, Y, j1], [0, 0, -1], [-h1 * PT, H * PT], [-h0 * PT, H * PT], [-h0 * PT, Y * PT], [-h1 * PT, Y * PT]);
       sky.quad([h0, Y, j0], [h1, Y, j0], [h1, Y, j1], [h0, Y, j1], [0, -1, 0], [0, 0], [1, 0], [1, 1], [0, 1]);
-      // the shaft of light falling from the opening along the sun direction, down to the water or deck
-      { const k0 = (H - 0.0) / SUN_DIR.y, lx = mx - SUN_DIR.x * k0, lz = mz - SUN_DIR.z * k0;
-        const yb = groundAt(lx, lz) < -0.1 ? WATER_Y : 0.0, k = (H - yb) / SUN_DIR.y, dx = -SUN_DIR.x * k, dz = -SUN_DIR.z * k;
-        const T = [[h0, j0], [h1, j0], [h1, j1], [h0, j1]];
-        for (let e = 0; e < 4; e++) { const [ax, az] = T[e], [bx, bz] = T[(e + 1) % 4];
-          const a = [ax, H, az], b = [bx, H, bz], c = [bx + dx, yb, bz + dz], d = [ax + dx, yb, az + dz];
-          const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-          const nn = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], nl = Math.hypot(...nn) || 1;
-          beam.quad(a, b, c, d, [nn[0] / nl, nn[1] / nl, nn[2] / nl], [0, 0], [1, 0], [1, 1], [0, 1]); } }
+      // bounding volume for the shaft of light falling from the opening (the shadow map gives its true shape)
+      { const mg = 0.35, k = (H + 0.2) / SUN_DIR.y, dx = -SUN_DIR.x * k, dz = -SUN_DIR.z * k, yb = -0.2, yt = H + 0.02;
+        const T = [[h0 - mg, j0 - mg], [h1 + mg, j0 - mg], [h1 + mg, j1 + mg], [h0 - mg, j1 + mg]];
+        const top = T.map(([x2, z2]) => [x2, yt, z2]), bot = T.map(([x2, z2]) => [x2 + dx, yb, z2 + dz]);
+        const C = [mx + dx / 2, (yt + yb) / 2, mz + dz / 2];
+        const face = (a, b, c, d) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+          let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n) || 1; n = n.map(q => q / l);
+          const fc = [(a[0] + c[0]) / 2 - C[0], (a[1] + c[1]) / 2 - C[1], (a[2] + c[2]) / 2 - C[2]];
+          if (n[0] * fc[0] + n[1] * fc[1] + n[2] * fc[2] < 0) n = n.map(q => -q);
+          beam.quad(a, b, c, d, n, [0, 0], [1, 0], [1, 1], [0, 1]); };
+        for (let e = 0; e < 4; e++) face(top[e], top[(e + 1) % 4], bot[(e + 1) % 4], bot[e]);
+        face(top[0], top[1], top[2], top[3]); face(bot[0], bot[1], bot[2], bot[3]); }
     } else cq(x, z, x + S, z + S);
     if (pool) {                                   // basin sides + a raised tiled lip on the deck side
       const cw = 0.22, ch = 0.03;
@@ -980,14 +1063,14 @@ function buildChunkPool(kx, kz) {
       for (const ld of RL.ladders) if (ld[1] * RG + ld[0] === ri) metal.push([cx, cz, ld[2]]);
       const sp = specialAt(cx, cz);
       if (sp && sp.t === 'stairs') {                // tiled steps climbing out of the water into a dark doorway in the wall
-        const g0 = isPool(cx, cz) ? -PD : 0, n = 9, top = 1.75, x0 = x + 0.6, x1 = x + 2.4;
-        for (let k = 0; k < n; k++) { const zt = z + HT + (n - k) * 0.18, yt = g0 + (k + 1) * (top - g0) / n;
+        const g0 = isPool(cx, cz) ? -PD : 0, n = STAIR.n, top = STAIR.top, x0 = x + STAIR.x0, x1 = x + STAIR.x1;
+        for (let k = 0; k < n; k++) { const zt = z + HT + (n - k) * STAIR.depth, yt = g0 + (k + 1) * (top - g0) / n;
           walls.box(x0, x1, g0, yt, z + HT, zt, PT, true); }
         voidQ.quad([x0, top, z + HT + 0.004], [x1, top, z + HT + 0.004], [x1, top + 1.9, z + HT + 0.004], [x0, top + 1.9, z + HT + 0.004], [0, 0, 1], [0, 0], [1, 0], [1, 1], [0, 1]);
       }
     }
     const bt = bottleAt(cx, cz);
-    if (bt && !collected.has(LEVEL + ':' + cx + ',' + cz)) bottles.push({ ...bt, key: LEVEL + ':' + cx + ',' + cz });
+    if (bt && !collected.has(lvKey() + ':' + cx + ',' + cz)) bottles.push({ ...bt, key: lvKey() + ':' + cx + ',' + cz });
   }
   const add = (gb, mat, cast) => { const g = gb.geometry(); if (!g) return; const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.castShadow = !!cast; m.matrixAutoUpdate = false; group.add(m); };
   add(floor, M.ptile); add(basin, M.ptile, true); add(ceil, M.pceil, true); add(walls, M.ptile, true); add(sky, skyTopMat); add(portal, M.portalCarpet); add(voidQ, voidMat);
@@ -1104,7 +1187,7 @@ const LV = [
   { H: 3.6, lightI: 9.0, cool: 0.5, ambient: 0.05, envScale: 1.05, emissive: 0, fog: [0.42, 0.46, 0.41], fogD: 0.03, sun: 5.5, envFloor: 0.42 },
 ];
 function setLevel(n) {
-  LEVEL = n; const P = LV[n]; H = P.H;
+  LEVEL = n; FLOOR = 0; pregions.clear(); const P = LV[n]; H = P.H;
   U.uH.value = H; U.uLightI.value = P.lightI; U.uCool.value = P.cool; U.uAmbient.value = P.ambient; U.uEnvScale.value = P.envScale; U.uEmissive.value = P.emissive; U.uEnvFloor.value = P.envFloor;
   scene.environment = ENVS[n] || (ENVS[n] = buildEnv(n));
   scene.fog.color.setRGB(...P.fog); scene.fog.density = P.fogD; scene.background.setRGB(...P.fog);
@@ -1120,9 +1203,27 @@ function setLevel(n) {
   if (typeof syncLevelButton === 'function') syncLevelButton();
 }
 let switching = false;
+function changeFloor(cx, cz) {                       // walk into the dark doorway at the top of a staircase
+  const here = FLOOR + ':' + cx + ',' + cz;
+  const to = stairLinks.has(here) ? stairLinks.get(here) : FLOOR + 1;
+  if (to < 0 || to > TOP_FLOOR || switching) return;
+  switching = true; fadeTarget = 1;
+  playSample('land', 0.35, { verb: true }); sfxNoise(1.2, 220, 0.25, 'lowpass', 1.2);
+  setTimeout(() => {
+    stairLinks.set(here, to); stairLinks.set(to + ':' + cx + ',' + cz, FLOOR);   // linked both ways
+    FLOOR = to; pregions.clear();
+    for (const [, c] of chunks) disposeChunk(c); chunks.clear(); worldCenter = null; sunKey = '';
+    player.x = cx * S + S / 2; player.z = cz * S + HT + 0.42; player.vy = 0;          // top step, back to the doorway
+    player.y = player.ground = groundAt(player.x, player.z);
+    player.yaw = Math.PI; mb.yaw = player.yaw;
+    updateWorldTex(Math.floor(player.x / S), Math.floor(player.z / S)); streamChunks(player.x, player.z, 99); trackSun();
+    entity.visible = false; entityTimer = 20;
+    fadeTarget = 0; setTimeout(() => { switching = false; }, 900);
+  }, 900);
+}
 function switchLevel(n) {
   if (switching) return; switching = true; fadeTarget = 1;
-  sfxNoise(1.6, 300, 0.5, 'lowpass', 1.5); sfxTone(180, 60, 1.6, 0.12, 'sine');
+  playSample('scareT', 0.6, { verb: true, fallback: () => { sfxNoise(1.6, 300, 0.5, 'lowpass', 1.5); sfxTone(180, 60, 1.6, 0.12, 'sine'); } });
   setTimeout(() => { setLevel(n); fadeTarget = 0; switching = false; }, 1500);
 }
 
@@ -1312,14 +1413,20 @@ function initAudio() {
     A.waterG = waterG;
     // recorded audio: Level 0 ambience bed + footstep samples
     A.buf = {}; const ambG = ctx.createGain(); ambG.gain.value = 0; ambG.connect(master); A.ambG = ambG;
-    const load = (k, url) => fetch(url).then(r => r.arrayBuffer()).then(b => new Promise((res, rej) => ctx.decodeAudioData(b, res, rej)))
-      .then(buf => { A.buf[k] = buf; if (k === 'amb') { const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(ambG); src.start(); } }).catch(() => {});
+    const pend = [];
+    const load = (k, url) => { LOAD.aud[1]++; const pr = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then(b => new Promise((res, rej) => ctx.decodeAudioData(b, res, rej)))
+      .then(buf => { A.buf[k] = buf; LOAD.aud[0]++; if (k === 'amb') { const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(ambG); src.start(); } })
+      .catch(err => { LOAD.fails.push({ kind: 'aud', url }); console.warn('audio failed', url, err); })
+      .finally(loaderUI); pend.push(pr); };
     load('amb', 'sfx/ambience-level0.mp3');
     for (const k of ['carpet', 'tile', 'wade']) for (const n of [1, 2]) load(k + n, `sfx/step-${k}-${n}.mp3`);
+    load('scare1', 'sfx/scare-1.mp3'); load('scare2', 'sfx/scare-2.mp3'); load('scareT', 'sfx/scare-transition.mp3'); load('land', 'sfx/land-bodyfall.mp3');
+    Promise.all(pend).then(() => { LOAD.audDone = true; loaderCheck(); });
     // dread drone
     const dG = ctx.createGain(); dG.gain.value = 0; dG.connect(master); A.droneG = dG;
     [43.6, 46.2, 87.9].forEach(f => { const o = ctx.createOscillator(); o.frequency.value = f; o.type = 'sine'; o.connect(dG); o.start(); });
-  } catch (e) { A.ctx = null; }
+  } catch (e) { A.ctx = null; LOAD.fails.push({ kind: 'aud', url: 'WebAudio unavailable' }); LOAD.audDone = true; loaderCheck(); }
 }
 function sfxNoise(dur, freq, gain, type = 'lowpass', q = 0.8, x, z) {
   if (!A.ctx) return; const ctx = A.ctx, t = ctx.currentTime;
@@ -1331,6 +1438,20 @@ function sfxNoise(dur, freq, gain, type = 'lowpass', q = 0.8, x, z) {
   if (A.rev) g.connect(A.rev);
   s.start(t, Math.random()); s.stop(t + dur + 0.05);
 }
+// one-shot sample, optionally placed in the world (HRTF) and muffled by distance
+function playSample(key, gain, opt = {}) {
+  if (!A.ctx || !A.buf || !A.buf[key]) { opt.fallback && opt.fallback(); return false; }
+  const ctx = A.ctx, src = ctx.createBufferSource(); src.buffer = A.buf[key];
+  if (opt.rate) src.playbackRate.value = opt.rate;
+  const g = ctx.createGain(); g.gain.value = gain; let node = src;
+  if (opt.lowpass) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opt.lowpass; src.connect(f); node = f; }
+  node.connect(g);
+  if (opt.x !== undefined) { const p = ctx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse'; p.refDistance = 4; p.rolloffFactor = 0.6;
+    p.positionX.value = opt.x; p.positionY.value = 1.6; p.positionZ.value = opt.z; g.connect(p); p.connect(A.master); if (A.rev) p.connect(A.rev); }
+  else { g.connect(A.master); if (A.rev && opt.verb) g.connect(A.rev); }
+  src.start(); return true;
+}
+const scareKey = () => Math.random() < 0.5 ? 'scare1' : 'scare2';
 function playStep(kind, loud, fallback) {
   if (!A.ctx) return;
   const buf = A.buf && (A.buf[kind + (Math.random() < 0.5 ? 1 : 2)] || A.buf[kind + 1]);
@@ -1473,7 +1594,7 @@ function respawn() {
 // ───────────────────────────── main loop ───────────────────────────────────
 const clock = new THREE.Clock();
 const mb = { yaw: 0, pitch: 0, v: new THREE.Vector2() };
-let waterScanT = 0;
+let waterScanT = 0, scareT = 100 + Math.random() * 80;
 let fpsAcc = 0, fpsN = 0, stepSide = 0, lastBuzz = 0, knockT = 6;
 const fwd = new THREE.Vector3();
 function tick() {
@@ -1501,11 +1622,15 @@ function tick() {
     player.vx += (tx - player.vx) * acc; player.vz += (tz - player.vz) * acc;
     const ox = player.x, oz = player.z;
     [player.x, player.z] = collide(player.x + player.vx * dt, player.z + player.vz * dt);
-    const gnd = player.noclip ? 0 : groundAt(player.x, player.z); player.ground = gnd;
+    let gnd = player.noclip ? 0 : groundAt(player.x, player.z);
+    if (!player.noclip && gnd - player.y > 0.62) { player.x = ox; player.z = oz; player.vx *= 0.2; player.vz *= 0.2; gnd = groundAt(ox, oz); }
+    player.ground = gnd;
+    const prevY = player.y;
     player.vy -= 12 * dt; player.y += player.vy * dt;
     if (player.y <= gnd) {
-      if (gnd - player.y > 0.03 && player.vy <= 0 && player.y > gnd - PD - 0.05) { player.y = Math.min(gnd, player.y + dt * 3.2); player.vy = 0; } // climb the pool step
-      else { if (player.vy < -2.5) { if (gnd < -0.1) playStep('wade', 1.5, () => sfxNoise(0.5, 1400, 0.45, 'bandpass', 0.5)); else playStep(LEVEL === 1 ? 'tile' : 'carpet', 1.2, () => sfxNoise(0.18, 420, 0.3, 'lowpass', 0.7)); } player.y = gnd; player.vy = 0; }
+      // walked into higher ground (out of a pool): step up; a landing from a jump falls through to the else-branch
+      if (prevY < gnd - 0.03 && player.vy <= 0.5 && prevY > gnd - PD - 0.05) { player.y = Math.min(gnd, player.y + dt * 3.2); player.vy = 0; } // climb the pool step
+      else { if (player.vy < -2.5) { if (gnd < -0.1) playStep('wade', 1.5, () => sfxNoise(0.5, 1400, 0.45, 'bandpass', 0.5)); else { const hard = Math.min(1, (-player.vy - 2.5) / 3); playSample('land', 0.45 + 0.4 * hard, { rate: 0.95 + Math.random() * 0.1, verb: LEVEL === 1, lowpass: LEVEL === 0 ? 2600 : undefined, fallback: () => playStep(LEVEL === 1 ? 'tile' : 'carpet', 1.2) }); } } player.y = gnd; player.vy = 0; }
     }
     const moved = Math.hypot(player.x - ox, player.z - oz) * (player.y > gnd + 0.01 ? 0 : 1); player.dist += moved;
     const sp = moved / Math.max(dt, 1e-4);
@@ -1517,9 +1642,17 @@ function tick() {
       else if (LEVEL === 1) playStep('tile', lv * 0.75, () => sfxNoise(0.09, 1600 + Math.random() * 900, 0.16, 'bandpass', 1.2));
       else playStep('carpet', lv * 0.9, () => sfxNoise(0.16, 380 + Math.random() * 260, 0.22 + (wantRun ? 0.12 : 0), 'lowpass', 0.7));
     }
-    if (TEST && !TP.get('still')) player.yaw += dt * 0.25;
+    if (TEST && !TP.get('still') && !TP.get('norot')) player.yaw += dt * 0.25;
     if (TEST && TP.get('spin')) player.yaw += dt * +TP.get('spin');
 
+    // the dark doorway at the top of Poolrooms stairs: up (or back down) a floor
+    if (LEVEL === 1 && !switching) {
+      const pcx = Math.floor(player.x / S), pcz = Math.floor(player.z / S), sp = specialAt(pcx, pcz);
+      if (sp && sp.t === 'stairs' && player.y > STAIR.top - 0.4) {
+        const lx = player.x - pcx * S, d = player.z - (pcz * S + HT);
+        if (lx > STAIR.x0 + 0.25 && lx < STAIR.x1 - 0.25 && d < 0.36) changeFloor(pcx, pcz);
+      }
+    }
     // portals between levels
     if (!switching) {
       const pcx = Math.floor(player.x / S), pcz = Math.floor(player.z / S), [RL, ri] = cellRef(pcx, pcz);
@@ -1536,7 +1669,12 @@ function tick() {
         water.visible = near;
       }
     }
-    if (LEVEL === 1) trackSun();
+    if (LEVEL === 1) {
+      trackSun();
+      const sm = sun.shadow.map;
+      beamMat.uniforms.uHasShadow.value = sm ? 1 : 0; beamMat.uniforms.uSunDir.value.copy(SUN_DIR);
+      if (sm) { beamMat.uniforms.uShadowMap.value = sm.texture; beamMat.uniforms.uShadowMatrix.value = sun.shadow.matrix; }
+    }
     // local lighting → sanity / audio
     const ll = localLight(player.x, player.z, t);
     const lit = Math.min(1, ll * 0.35);
@@ -1583,7 +1721,8 @@ function tick() {
       const U2 = entity.userData;
       if (!U2.seen) {
         if (onScreen) {                                 // first sighting: start its clock from here
-          U2.seen = true; U2.d0 = d; entityTimer = 8 + Math.random() * 7; sfxTone(80, 50, 3.0, 0.12, 'sawtooth');
+          U2.seen = true; U2.d0 = d; entityTimer = 8 + Math.random() * 7;
+          playSample(scareKey(), 0.9, { x: ex, z: ez, fallback: () => sfxTone(80, 50, 3.0, 0.12, 'sawtooth') });
         } else if ((U2.unseenT += dt) > 30 || d < 8) {  // never noticed: leave quietly
           entity.visible = false; entityTimer = 10 + Math.random() * 15;
         }
@@ -1591,9 +1730,14 @@ function tick() {
         const close = d < U2.d0 - 3;                    // a few steps towards it and it's gone
         if (close || entityTimer <= 0) {
           entity.visible = false; entityTimer = 12 + Math.random() * 20;
-          if (close) { sfxNoise(0.9, 160, 0.6, 'lowpass', 3); sfxTone(900, 60, 0.7, 0.15, 'square'); }
+          if (close) playSample('scareT', 0.75, { verb: true, fallback: () => { sfxNoise(0.9, 160, 0.6, 'lowpass', 3); sfxTone(900, 60, 0.7, 0.15, 'square'); } });
         }
       }
+    }
+    if ((scareT -= dt) < 0) {                        // now and then, something far away in the halls
+      scareT = 120 + Math.random() * 120;
+      const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 10;
+      playSample(scareKey(), 0.35, { x: player.x + Math.cos(a) * r, z: player.z + Math.sin(a) * r, lowpass: 1500, rate: 0.85 + Math.random() * 0.2 });
     }
     knockT -= dt;
     if (knockT < 0) { // distant knocks and footsteps that aren't yours
@@ -1670,8 +1814,27 @@ updateWorldTex(0, 0);
 streamChunks(player.x, player.z, 99);
 player.yaw = Math.PI * 0.25;
 if (TEST && TP.get('x')) { player.x = +TP.get('x'); player.z = +TP.get('z'); player.yaw = +(TP.get('yaw') ?? 0); for (const [, c] of chunks) disposeChunk(c); chunks.clear(); streamChunks(player.x, player.z, 99); }
-try { renderer.compile(scene, camera); } catch (e) {}
 mb.yaw = player.yaw; mb.pitch = player.pitch;
-running = true; started = true; startTime = performance.now();
+LOAD.world = true; loaderUI();
+initAudio();                                      // decodes sounds now; playback starts on the ENTER tap
+(renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve(renderer.compile(scene, camera)))
+  .catch(() => {}).then(() => { LOAD.shaders = true; loaderCheck(); });
+setTimeout(() => {                                // never hang forever: after 25 s, let the player in regardless
+  if (LOAD.finished) return;
+  if (!LOAD.texDone) { LOAD.texDone = true; LOAD.fails.push({ kind: 'tex', url: 'timeout' }); }
+  if (!LOAD.audDone) { LOAD.audDone = true; LOAD.fails.push({ kind: 'aud', url: 'timeout' }); }
+  LOAD.shaders = true; loaderCheck();
+}, 25000);
+function enterGame() {
+  const L = document.getElementById('loader');
+  initAudio(); A.ctx?.resume?.();
+  if (A.ambG && A.ctx) { const at = A.ctx.currentTime; A.ambG.gain.cancelScheduledValues(at); A.ambG.gain.setValueAtTime(0, at); A.ambG.gain.linearRampToValueAtTime(3.6, at + 1.8); }
+  L.classList.add('finishing');                   // "FINISHED" while the ambience swells in
+  setTimeout(() => {
+    running = true; started = true; startTime = performance.now(); clock.getDelta();
+    L.classList.add('out'); setTimeout(() => L.remove(), 1300);
+  }, 2200);
+}
+if (TEST) { running = true; started = true; startTime = performance.now(); document.getElementById('loader')?.remove(); }
 if (TEST) { const sp = new URLSearchParams(location.search); setQuality(+(sp.get('q') ?? 1)); setFilter(+(sp.get('f') ?? 0)); player.pitch = +(sp.get('p') ?? 0); if (sp.get('flash')) toggleFlash(); if (sp.get('s')) player.sanity = +sp.get('s'); if (sp.get('noao') && gtao) gtao.enabled = false; if (sp.get('ent')) setTimeout(() => { const d = +sp.get('ent'); entity.position.set(player.x - Math.sin(player.yaw) * d, 0, player.z - Math.cos(player.yaw) * d); entity.position.y = groundAt(entity.position.x, entity.position.z); entity.userData.d0 = d; entity.userData.seen = false; entity.userData.unseenT = -999; entity.visible = true; }, 400); }
 tick();

@@ -160,6 +160,108 @@ a:hover{color: green;}
 
 
 
+<!-- Backrooms Level 0 theme for this page only. Textures come from the game's own folder. -->
+<style>
+:root {
+  --br-cream: #efe2a0;
+  --br-paper: #e9dc9a;
+  --br-dim: #bfb37a;
+  --br-panel: rgba(38, 33, 12, 0.82);
+  --br-line: rgba(239, 226, 160, 0.22);
+  --br-trim: #e4dcbf;
+}
+body {
+  color: var(--br-cream);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 244, 170, 0.10) 0%, rgba(20, 17, 4, 0.55) 75%),
+    linear-gradient(rgba(70, 62, 20, 0.30), rgba(70, 62, 20, 0.30)),
+    url(../games/backrooms-level-0/tex/wall-diffuse.jpg) center top / 380px auto repeat;
+  background-color: #8e8a4e;
+  background-attachment: fixed;
+}
+/* ceiling: drop tiles with a fluorescent tube */
+.top-nav, .navbar {
+  position: relative;
+  background:
+    linear-gradient(rgba(28, 24, 8, 0.62), rgba(28, 24, 8, 0.62)),
+    url(../games/backrooms-level-0/tex/ceiling-tile-diffuse.jpg) center / 150px auto repeat !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.top-nav::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+  width: min(420px, 60%); height: 7px; border-radius: 4px;
+  background: #fffbe0;
+  box-shadow: 0 0 10px 3px rgba(255, 250, 205, 0.85), 0 0 46px 12px rgba(255, 244, 170, 0.35), 0 30px 90px 30px rgba(255, 240, 160, 0.10);
+  animation: br-flicker 9s infinite;
+  pointer-events: none;
+}
+@keyframes br-flicker {
+  0%, 61%, 64%, 67%, 100% { opacity: 1; }
+  62%, 66% { opacity: 0.35; }
+  63% { opacity: 0.85; }
+  65% { opacity: 0.15; }
+}
+@media (prefers-reduced-motion: reduce) { .top-nav::after { animation: none; } }
+.top-nav a, .nav-link { color: var(--br-cream) !important; }
+.nav-link:hover { color: #fff6c8 !important; text-shadow: 0 0 8px rgba(255, 244, 170, 0.6); }
+.dropdown-menu { background: #2c2610; border: 1px solid var(--br-line); }
+.dropdown-item { color: var(--br-cream); }
+.dropdown-item:hover { background: rgba(239, 226, 160, 0.14); color: #fff6c8; }
+/* game frame: a cream wall-trim doorway */
+.game-container {
+  background: linear-gradient(#ece5c9, #d8cfab);
+  border-radius: 6px;
+  padding: 14px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18), 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 60px rgba(255, 240, 160, 0.10);
+}
+.game-iframe-container { background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.game-info { background: #2c2610; border-top: 1px solid rgba(0, 0, 0, 0.4); }
+.game-info h1, .single-title {
+  color: var(--br-cream) !important;
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 18px rgba(240, 220, 120, 0.25);
+}
+.btn-capsule { background: var(--br-paper); color: #16140c; border: 0; font-weight: 600; letter-spacing: 0.08em; }
+.btn-capsule:hover, .btn-capsule:focus { background: #fff1b0; color: #16140c; }
+/* panels: faded mustard boards */
+.vex_x, .post-body {
+  background: var(--br-panel) !important;
+  border: 1px solid var(--br-line);
+  border-radius: 6px;
+  color: var(--br-cream);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.section-title, .post-title, h2, h3 {
+  color: var(--br-cream) !important;
+  font-family: Georgia, 'Times New Roman', serif !important;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 16px rgba(240, 220, 120, 0.22) !important;
+}
+p, li { color: #e6dbab; }
+a { color: #f3e7a8; }
+a:hover { color: #fff6c8; }
+.list-game .list-title, .list-title { color: var(--br-cream) !important; }
+.list-game .list-title:hover { color: #fff6c8 !important; }
+.list-category { color: var(--br-dim); }
+.list-thumbnail img { border-radius: 4px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); filter: sepia(0.15); }
+.game-item:hover .list-thumbnail img { filter: none; box-shadow: 0 0 0 2px rgba(255, 244, 170, 0.55), 0 0 20px rgba(255, 244, 170, 0.25); }
+hr { border-color: var(--br-line); opacity: 1; }
+/* floor: the moist carpet */
+.footer-copyright {
+  position: relative;
+  margin-top: 40px;
+  color: var(--br-cream);
+  background:
+    linear-gradient(rgba(20, 17, 6, 0.45), rgba(20, 17, 6, 0.65)),
+    url(../games/backrooms-level-0/tex/carpet-diffuse.jpg) center / 220px auto repeat;
+  border-top: 10px solid var(--br-trim);
+  box-shadow: inset 0 10px 0 rgba(0, 0, 0, 0.25);
+}
+.footer-copyright a { color: var(--br-cream); }
+</style>
 <body >
 
 <!-- Navigation-->

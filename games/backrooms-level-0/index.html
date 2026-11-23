@@ -21,6 +21,25 @@
   .tbtn.pill { border-radius:22px; width:auto; height:auto; padding:10px 16px; font-size:13px; }
   #tLevel { right:8%; bottom:calc(14% + 104px); }
   #tInfo { left:14px; top:14px; width:30px; height:30px; font:italic 600 15px/1 Georgia, serif; letter-spacing:0; opacity:.6; }
+  #loader { position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center; pointer-events:auto;
+    background:radial-gradient(ellipse at center, #2a2510 0%, #0c0b06 70%, #000 100%); color:#e9dc9a; font:15px/1.4 system-ui, sans-serif;
+    transition:opacity 1.2s ease; }
+  #loader.out { opacity:0; pointer-events:none; }
+  .lwrap { width:min(380px, 84vw); text-align:center; transition:opacity .6s; }
+  .ltitle { font:600 clamp(26px, 6vw, 44px)/1.1 Georgia, 'Times New Roman', serif; letter-spacing:.12em; color:#efe2a0; text-shadow:0 0 22px rgba(240,220,120,.28); }
+  .lsub { margin:10px 0 18px; font-size:12px; letter-spacing:.35em; color:#a89c5c; }
+  .lbar { height:4px; background:rgba(233,220,154,.14); border-radius:2px; overflow:hidden; }
+  .lbar i { display:block; height:100%; width:0; background:#e9dc9a; transition:width .25s; }
+  .lchecks { list-style:none; padding:0; margin:18px 0 0; text-align:left; font-size:14px; color:#bfb37a; }
+  .lchecks li { display:flex; gap:10px; padding:3px 0; } .lchecks em { margin-left:auto; font-style:normal; color:#8f8656; font-variant-numeric:tabular-nums; }
+  .lchecks .st { width:16px; text-align:center; color:#8f8656; } .lchecks .ok { color:#9fd68a; } .lchecks .bad { color:#ff8a6a; }
+  .lwarn { min-height:1.2em; margin-top:10px; font-size:13px; color:#ffb08a; }
+  #lGo { margin-top:16px; font:600 16px system-ui; letter-spacing:.3em; color:#16140c; background:#e9dc9a; border:0; border-radius:6px; padding:12px 34px; cursor:pointer;
+    animation:lpulse 1.6s ease-in-out infinite; }
+  @keyframes lpulse { 50% { opacity:.65; } }
+  .lfinish { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:600 clamp(28px, 7vw, 54px) Georgia, serif;
+    letter-spacing:.3em; color:#efe2a0; opacity:0; pointer-events:none; transition:opacity .9s; text-shadow:0 0 30px rgba(240,220,120,.35); }
+  #loader.finishing .lwrap { opacity:0; } #loader.finishing .lfinish { opacity:1; }
   #credits { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
   #credits[hidden] { display:none; }
   .cbox { max-width:min(560px, 90vw); max-height:85vh; overflow:auto; background:#141410; color:#e8e2c4; border:1px solid rgba(240,230,180,.25);
@@ -38,11 +57,29 @@
   <button class="tbtn pill" id="tLevel">POOLROOMS</button>
   <button class="tbtn" id="tInfo" aria-label="Credits">i</button>
 </div>
+<div id="loader">
+  <div class="lwrap">
+    <div class="ltitle">THE BACKROOMS</div>
+    <div class="lsub" id="lSub">LOADING</div>
+    <div class="lbar"><i id="lBar"></i></div>
+    <ul class="lchecks">
+      <li id="lc-tex"><span class="st">…</span>Textures <em></em></li>
+      <li id="lc-aud"><span class="st">…</span>Audio <em></em></li>
+      <li id="lc-wld"><span class="st">…</span>World <em></em></li>
+      <li id="lc-shd"><span class="st">…</span>Shaders <em></em></li>
+    </ul>
+    <div class="lwarn" id="lWarn"></div>
+    <button id="lGo" hidden>ENTER</button>
+  </div>
+  <div class="lfinish" id="lFinish">FINISHED</div>
+</div>
 <div id="credits" hidden>
   <div class="cbox">
     <h2>Credits</h2>
     <p><b>Footstep sounds</b>: Sounds by JDSherbert – <a href="https://jdsherbert.itch.io/footstep-foley-sfx-pack" target="_blank" rel="noopener">jdsherbert.itch.io</a> (Footstep Foley SFX Pack)</p>
     <p><b>Level 0 ambience</b>: “Backrooms Ambience” by Resaural – <a href="https://freesound.org/people/Resaural/sounds/626096/" target="_blank" rel="noopener">freesound.org</a> (CC0)</p>
+    <p><b>Scary sounds</b>: Dragon Studio – <a href="https://pixabay.com/es/users/dragon-studio-38165424/" target="_blank" rel="noopener">Pixabay</a></p>
+    <p><b>Landing sound</b>: “Body Fall” by thekids15 – <a href="https://pixabay.com/es/sound-effects/pel%C3%ADculas-y-efectos-especiales-body-fall-195147/" target="_blank" rel="noopener">Pixabay</a></p>
     <p><b>Backrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/backrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/backrooms-textures</a> (CC0)</p>
     <p><b>Poolrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/poolrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/poolrooms-textures</a> (CC0)</p>
     <p><b>3D engine</b>: three.js – <a href="https://threejs.org" target="_blank" rel="noopener">threejs.org</a> (MIT)</p>

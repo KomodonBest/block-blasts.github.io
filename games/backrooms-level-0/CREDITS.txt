@@ -2,6 +2,8 @@ THE BACKROOMS — credits
 
 Footstep sounds: Sounds by JDSherbert – https://jdsherbert.itch.io/footstep-foley-sfx-pack (Footstep Foley SFX Pack)
 Level 0 ambience: "Backrooms Ambience" by Resaural – https://freesound.org/people/Resaural/sounds/626096/ (CC0)
+Scary sounds (sighting, transition, distant): Dragon Studio – Pixabay (https://pixabay.com/es/users/dragon-studio-38165424/)
+Landing sound: "Body Fall" by thekids15 – https://pixabay.com/es/sound-effects/pel%C3%ADculas-y-efectos-especiales-body-fall-195147/
 Backrooms textures: Amini Allight – https://github.com/amini-allight/backrooms-textures (CC0)
 Poolrooms textures: Amini Allight – https://github.com/amini-allight/poolrooms-textures (CC0)
 3D engine: three.js – https://threejs.org (MIT, see lib/three-LICENSE.txt)
