@@ -49,12 +49,39 @@
   .mpmsg { min-height:1.3em; margin-top:8px; font-size:13px; color:#cbbd78; }
   #roomTag { position:fixed; top:14px; left:52px; z-index:6; pointer-events:none; font:600 12px/1 system-ui; letter-spacing:.12em; color:rgba(240,230,180,.8);
     background:rgba(0,0,0,.3); border:1px solid rgba(240,230,180,.3); border-radius:14px; padding:8px 12px; }
+  #death { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; pointer-events:none;
+    font:400 clamp(28px,6vw,56px) Georgia,serif; letter-spacing:.35em; color:#8a1a14; opacity:0; }
+  #death.show { animation: dieIn 6.2s ease forwards; }
+  @keyframes dieIn { 0% { opacity:0 } 20% { opacity:1 } 70% { opacity:1 } 100% { opacity:0 } }
+  #redvig { position:fixed; inset:0; z-index:5; pointer-events:none; opacity:0;
+    background:radial-gradient(ellipse at center, rgba(120,0,0,0) 42%, rgba(120,0,0,.45) 70%, rgba(90,0,0,.9) 100%); }
+  #face { position:fixed; inset:0; z-index:30; background:#000; pointer-events:none; overflow:hidden; }
+  #face img { width:100%; height:100%; object-fit:contain; }
+  #face.go img { animation: faceIn 1.3s linear forwards; }
+  @keyframes faceIn { 0% { transform:scale(1.6); filter:brightness(2) } 6% { transform:scale(1.08) translate(-1%,1%); filter:none } 12% { transform:scale(1.12) translate(1.5%,-1%) }
+    18% { transform:scale(1.1) translate(-1.5%,.5%) } 24% { transform:scale(1.14) translate(1%,1.5%) } 30% { transform:scale(1.12) translate(-.5%,-1.5%) } 100% { transform:scale(1.3) } }
+  #batt { position:fixed; top:16px; right:18px; z-index:6; width:34px; height:16px; box-sizing:border-box; padding:2px; display:flex; gap:2px; cursor:pointer;
+    border:1.5px solid rgba(240,230,180,.55); border-radius:3px; opacity:.55; }
+  #batt[hidden] { display:none; }
+  #batt::after { content:''; position:absolute; right:-5px; top:4px; width:3px; height:6px; border-radius:0 2px 2px 0; background:rgba(240,230,180,.55); }
+  #batt i { flex:1; border-radius:1px; background:transparent; }
+  #batt i.f { background:rgba(240,230,180,.85); }
+  #batt.on { opacity:.9; }
+  #batt.low i.f { background:#c8553d; }
   #credits { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
   #credits[hidden] { display:none; }
   .cbox { max-width:min(560px, 90vw); max-height:85vh; overflow:auto; background:#141410; color:#e8e2c4; border:1px solid rgba(240,230,180,.25);
     border-radius:10px; padding:22px 26px; font:15px/1.5 system-ui, sans-serif; user-select:text; -webkit-user-select:text; }
   .cbox h2 { margin:0 0 12px; font-size:18px; letter-spacing:.08em; font-weight:600; }
   .cbox p { margin:0 0 10px; } .cbox a { color:#d9cd8c; word-break:break-word; }
+  #admPad { height:70vh; }
+  #admin { margin-top:14px; padding-top:14px; border-top:1px solid rgba(240,230,180,.15); }
+  #admin h3 { margin:0 0 10px; font-size:13px; letter-spacing:.25em; text-transform:uppercase; color:#d9cd8c; font-weight:600; }
+  #admin label { display:block; margin:6px 0; font-size:14px; } #admin [hidden] { display:none; }
+  #admGate, .arow { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  #admCode, #admKm { width:110px; font:600 14px system-ui; letter-spacing:.15em; color:#e8e2c4; background:#0c0b06; border:1px solid #4d4626; border-radius:6px; padding:7px; }
+  .abtn { font:600 13px system-ui; color:#e8e2c4; background:transparent; border:1px solid rgba(240,230,180,.35); border-radius:6px; padding:7px 11px; cursor:pointer; }
+  .amsg { min-height:1.2em; font-size:13px; color:#cbbd78; }
   .cclose { margin-top:8px; font:600 14px system-ui; color:#e8e2c4; background:transparent; border:1px solid rgba(240,230,180,.4); border-radius:6px; padding:8px 16px; cursor:pointer; }
 </style>
 </head>
@@ -90,6 +117,10 @@
   <div class="lfinish" id="lFinish">FINISHED</div>
 </div>
 <div id="roomTag" hidden></div>
+<div id="redvig"></div>
+<div id="death" hidden>YOU DIED</div>
+<div id="face" hidden><img src="tex/face.jpg" alt=""></div>
+<div id="batt" hidden><i></i><i></i><i></i><i></i></div>
 <div id="credits" hidden>
   <div class="cbox">
     <h2>Credits</h2>
@@ -97,10 +128,34 @@
     <p><b>Level 0 ambience</b>: “Backrooms Ambience” by Resaural – <a href="https://freesound.org/people/Resaural/sounds/626096/" target="_blank" rel="noopener">freesound.org</a> (CC0)</p>
     <p><b>Scary sounds</b>: Dragon Studio – <a href="https://pixabay.com/es/users/dragon-studio-38165424/" target="_blank" rel="noopener">Pixabay</a></p>
     <p><b>Landing sound</b>: “Body Fall” by thekids15 – <a href="https://pixabay.com/es/sound-effects/pel%C3%ADculas-y-efectos-especiales-body-fall-195147/" target="_blank" rel="noopener">Pixabay</a></p>
+    <p><b>Jumpscare sound</b>: “Jumpscare” by freesound_community – Pixabay</p>
+    <p><b>“Psst” sound</b>: recorded by the game’s creator</p>
+    <p><b>Heartbeat sound</b>: hyogi_koukiii – <a href="https://www.instagram.com/hyogi_koukiii/" target="_blank" rel="noopener">instagram.com/hyogi_koukiii</a></p>
+    <p><b>Screamer sound</b>: “Screamer Jumpscare” by freesound_community – <a href="https://pixabay.com/es/sound-effects/pel%C3%ADculas-y-efectos-especiales-screamer-jumpscare-66896/" target="_blank" rel="noopener">Pixabay</a></p>
+    <p><b>Water drop &amp; swimming sounds</b>: Dragon Studio – <a href="https://pixabay.com/sound-effects/film-special-effects-waterdrop-406639/" target="_blank" rel="noopener">Pixabay</a></p>
+    <p><b>Child laughing</b>: freesound_community – <a href="https://pixabay.com/es/sound-effects/gente-child-laughing-90664/" target="_blank" rel="noopener">Pixabay</a></p>
     <p><b>Backrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/backrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/backrooms-textures</a> (CC0)</p>
     <p><b>Poolrooms textures</b>: Amini Allight – <a href="https://github.com/amini-allight/poolrooms-textures" target="_blank" rel="noopener">github.com/amini-allight/poolrooms-textures</a> (CC0)</p>
+    <p><b>Bacteria model</b>: “Bacteria - Kane PIxels Backrooms” (<a href="https://skfb.ly/pBZ8p" target="_blank" rel="noopener">skfb.ly/pBZ8p</a>) by Roman Trace, licensed under <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution</a></p>
     <p><b>3D engine</b>: three.js – <a href="https://threejs.org" target="_blank" rel="noopener">threejs.org</a> (MIT)</p>
     <button class="cclose" id="cClose">Close</button>
+    <div id="admPad" hidden></div>
+    <div id="admin" hidden>
+      <form id="admGate"><input id="admCode" maxlength="12" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="abtn" type="submit">OK</button></form>
+      <div id="admMenu" hidden>
+        <h3>Admin</h3>
+        <div class="arow"><button class="abtn" data-a="sil">Spawn silhouette</button><button class="abtn" data-a="trap">Silhouette trap</button><button class="abtn" data-a="psst">Psst</button></div>
+        <div class="arow"><button class="abtn" data-a="eye">Spawn eyes</button><button class="abtn" data-a="hallu">Hallucinate</button><button class="abtn" data-a="gear">Flashlight + battery</button></div>
+        <div class="arow"><button class="abtn" data-a="bact">Spawn Bacteria</button><button class="abtn" data-a="hunt">Bacteria hunts me</button></div>
+        <div class="arow"><input id="admKm" type="number" step="any" placeholder="km" value="1"><button class="abtn" data-a="tp">Teleport ahead</button></div>
+        <div class="arow"><button class="abtn" data-a="l0">Level 0</button><button class="abtn" data-a="l1">Poolrooms</button><button class="abtn" data-a="world">New world</button></div>
+        <label><input type="checkbox" id="admNoclip"> Noclip (walk through walls)</label>
+        <label><input type="checkbox" id="admGod"> God mode (the Bacteria can't catch you)</label>
+        <label><input type="checkbox" id="admNoEnt"> No entities</label>
+        <div class="arow"><button class="abtn" data-a="sanity">Full sanity</button><button class="abtn" data-a="lock">Lock this device</button></div>
+      </div>
+      <div class="amsg" id="admMsg"></div>
+    </div>
   </div>
 </div>
 
